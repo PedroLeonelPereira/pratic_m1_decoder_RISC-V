@@ -1,0 +1,9 @@
+# R, I, S, B, U, J; o BEQ tem deslocamento -8.
+0x00500413  # addi s0, zero, 5
+0x00C58633  # add a2, a1, a2
+0x0064A423  # sw t1, 8(s1)
+0xFE628CE3  # beq t0, t1, PC-8
+0x12345437  # lui s0, 0x12345
+0x008000EF  # jal ra, PC+8
+0x00000013  # nop (addi)
+0x00008067  # ret (jalr)
