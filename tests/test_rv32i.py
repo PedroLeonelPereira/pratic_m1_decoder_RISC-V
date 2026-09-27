@@ -31,39 +31,42 @@ class Rv32iTests(unittest.TestCase):
         for mnemonic, funct3, funct7 in registers:
             with self.subTest(mnemonic=mnemonic):
                 item = decode(0x1000, encode_r(funct3, funct7))
-                self.assertEqual((item.format, item.mnemonic, item.rd, item.rs1,
-                                  item.rs2, item.funct3, item.funct7),
+                self.assertEqual((item["format"], item["mnemonic"], item["rd"],
+                                  item["rs1"], item["rs2"], item["funct3"],
+                                  item["funct7"]),
                                  ("R", mnemonic, 8, 9, 10, funct3, funct7))
         immediates = (("addi", 0), ("slti", 2), ("sltiu", 3),
                       ("xori", 4), ("ori", 6), ("andi", 7))
         for mnemonic, funct3 in immediates:
             with self.subTest(mnemonic=mnemonic):
                 item = decode(0x1000, encode_i(0x13, funct3))
-                self.assertEqual((item.mnemonic, item.immediate, item.funct7),
+                self.assertEqual((item["mnemonic"], item["immediate"], item["funct7"]),
                                  (mnemonic, -8, None))
         for mnemonic, funct3, upper in (("slli", 1, 0), ("srli", 5, 0),
                                         ("srai", 5, 0x20)):
             word = encode_i(0x13, funct3, (upper << 5) | 3)
             item = decode(0, word)
-            self.assertEqual((item.mnemonic, item.immediate, item.funct7),
+            self.assertEqual((item["mnemonic"], item["immediate"], item["funct7"]),
                              (mnemonic, 3, None))
 
     def test_all_memory_and_branch_encodings(self):
         for mnemonic, funct3 in (("lb", 0), ("lh", 1), ("lw", 2),
                                  ("lbu", 4), ("lhu", 5)):
             item = decode(0, encode_i(0x03, funct3))
-            self.assertEqual((item.mnemonic, item.rd, item.rs1, item.rs2),
+            self.assertEqual((item["mnemonic"], item["rd"], item["rs1"], item["rs2"]),
                              (mnemonic, 8, 9, None))
             self.assertEqual(to_assembly(item), f"{mnemonic} s0, -8(s1)")
         for mnemonic, funct3 in (("sb", 0), ("sh", 1), ("sw", 2)):
             item = decode(0, encode_s(funct3))
-            self.assertEqual((item.mnemonic, item.rd, item.rs1, item.rs2, item.immediate),
+            self.assertEqual((item["mnemonic"], item["rd"], item["rs1"],
+                              item["rs2"], item["immediate"]),
                              (mnemonic, None, 9, 10, -8))
             self.assertEqual(to_assembly(item), f"{mnemonic} a0, -8(s1)")
         for mnemonic, funct3 in (("beq", 0), ("bne", 1), ("blt", 4),
                                  ("bge", 5), ("bltu", 6), ("bgeu", 7)):
             item = decode(0x1000, encode_b(funct3))
-            self.assertEqual((item.mnemonic, item.rd, item.immediate, item.target),
+            self.assertEqual((item["mnemonic"], item["rd"], item["immediate"],
+                              item["target"]),
                              (mnemonic, None, -8, 0xFF8))
 
     def test_control_upper_fence_and_system(self):
@@ -74,12 +77,12 @@ class Rv32iTests(unittest.TestCase):
         for word, mnemonic, format_name in words:
             with self.subTest(mnemonic=mnemonic):
                 item = decode(0x1000, word)
-                self.assertEqual((item.mnemonic, item.format, item.valid),
+                self.assertEqual((item["mnemonic"], item["format"], item["valid"]),
                                  (mnemonic, format_name, True))
         for word in (0x0FF0000F, 0x8330000F, 0x00000073, 0x00100073):
             item = decode(0, word)
             for field in ("rd", "rs1", "rs2", "funct3", "funct7", "immediate"):
-                self.assertIsNone(getattr(item, field))
+                self.assertIsNone(item[field])
         self.assertEqual(to_assembly(decode(0, 0x0FF0000F)), "fence iorw, iorw")
         self.assertEqual(to_assembly(decode(0, 0x8330000F)), "fence.tso")
         self.assertEqual(to_assembly(decode(0, 0x00000073)), "ecall")
@@ -89,4 +92,4 @@ class Rv32iTests(unittest.TestCase):
         for word in (0x02000033, 0x0000100F, 0x001010F3, 0x0000001B,
                      encode_i(0x13, 1, 0x401), encode_i(0x13, 5, 0x201)):
             with self.subTest(word=hex(word)):
-                self.assertFalse(decode(0, word).valid)
+                self.assertFalse(decode(0, word)["valid"])

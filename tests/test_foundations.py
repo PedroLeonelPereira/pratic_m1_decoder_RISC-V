@@ -1,16 +1,17 @@
 import unittest
 
-from src.models.instruction import Instruction
+from src.models.instruction import new_instruction
 from src.utils.bits import get_bits, sign_extend
 from src.utils.registers import register_name
 
 
 class FoundationTests(unittest.TestCase):
     def test_instruction_starts_with_only_machine_identity(self):
-        instruction = Instruction(pc=0x1000, word=0xFE628CE3)
-        self.assertEqual((instruction.pc, instruction.word), (0x1000, 0xFE628CE3))
+        instruction = new_instruction(0x1000, 0xFE628CE3)
+        self.assertEqual((instruction["pc"], instruction["word"]),
+                         (0x1000, 0xFE628CE3))
         for field in ("rd", "rs1", "rs2", "funct3", "funct7", "immediate"):
-            self.assertIsNone(getattr(instruction, field))
+            self.assertIsNone(instruction[field])
 
     def test_bit_range_is_inclusive(self):
         self.assertEqual(get_bits(0xFE628CE3, 0, 6), 0x63)

@@ -1,91 +1,82 @@
-"""Declarative encodings for the RV32I base instruction set."""
-
-from dataclasses import dataclass
+"""Instruction encodings supported by the RV32I decoder."""
 
 from src.utils.bits import get_bits
 
 
-@dataclass(frozen=True)
-class InstructionDefinition:
-    mnemonic: str
-    format: str
-    opcode: int
-    funct3: int | None = None
-    funct7: int | None = None
-    # I-format shifts use bits 31:25 to validate their encoding. These bits
-    # are not an exposed funct7 field of the decoded I-format instruction.
-    shift_upper_bits: int | None = None
-    encoding_mask: int = 0
-    encoding_value: int = 0
-    operand_kind: str = "normal"
-
-
-DEFINITIONS = (
-    InstructionDefinition("add", "R", 0x33, 0, 0x00),
-    InstructionDefinition("sub", "R", 0x33, 0, 0x20),
-    InstructionDefinition("sll", "R", 0x33, 1, 0x00),
-    InstructionDefinition("slt", "R", 0x33, 2, 0x00),
-    InstructionDefinition("sltu", "R", 0x33, 3, 0x00),
-    InstructionDefinition("xor", "R", 0x33, 4, 0x00),
-    InstructionDefinition("srl", "R", 0x33, 5, 0x00),
-    InstructionDefinition("sra", "R", 0x33, 5, 0x20),
-    InstructionDefinition("or", "R", 0x33, 6, 0x00),
-    InstructionDefinition("and", "R", 0x33, 7, 0x00),
-    InstructionDefinition("addi", "I", 0x13, 0),
-    InstructionDefinition("slti", "I", 0x13, 2),
-    InstructionDefinition("sltiu", "I", 0x13, 3),
-    InstructionDefinition("xori", "I", 0x13, 4),
-    InstructionDefinition("ori", "I", 0x13, 6),
-    InstructionDefinition("andi", "I", 0x13, 7),
-    InstructionDefinition("slli", "I", 0x13, 1, shift_upper_bits=0x00),
-    InstructionDefinition("srli", "I", 0x13, 5, shift_upper_bits=0x00),
-    InstructionDefinition("srai", "I", 0x13, 5, shift_upper_bits=0x20),
-    InstructionDefinition("lb", "I", 0x03, 0),
-    InstructionDefinition("lh", "I", 0x03, 1),
-    InstructionDefinition("lw", "I", 0x03, 2),
-    InstructionDefinition("lbu", "I", 0x03, 4),
-    InstructionDefinition("lhu", "I", 0x03, 5),
-    InstructionDefinition("jalr", "I", 0x67, 0),
-    InstructionDefinition("sb", "S", 0x23, 0),
-    InstructionDefinition("sh", "S", 0x23, 1),
-    InstructionDefinition("sw", "S", 0x23, 2),
-    InstructionDefinition("beq", "B", 0x63, 0),
-    InstructionDefinition("bne", "B", 0x63, 1),
-    InstructionDefinition("blt", "B", 0x63, 4),
-    InstructionDefinition("bge", "B", 0x63, 5),
-    InstructionDefinition("bltu", "B", 0x63, 6),
-    InstructionDefinition("bgeu", "B", 0x63, 7),
-    InstructionDefinition("lui", "U", 0x37),
-    InstructionDefinition("auipc", "U", 0x17),
-    InstructionDefinition("jal", "J", 0x6F),
+# Each dictionary describes one instruction encoding.
+DEFINITIONS = [
+    {"mnemonic": "add", "format": "R", "opcode": 0x33, "funct3": 0, "funct7": 0x00},
+    {"mnemonic": "sub", "format": "R", "opcode": 0x33, "funct3": 0, "funct7": 0x20},
+    {"mnemonic": "sll", "format": "R", "opcode": 0x33, "funct3": 1, "funct7": 0x00},
+    {"mnemonic": "slt", "format": "R", "opcode": 0x33, "funct3": 2, "funct7": 0x00},
+    {"mnemonic": "sltu", "format": "R", "opcode": 0x33, "funct3": 3, "funct7": 0x00},
+    {"mnemonic": "xor", "format": "R", "opcode": 0x33, "funct3": 4, "funct7": 0x00},
+    {"mnemonic": "srl", "format": "R", "opcode": 0x33, "funct3": 5, "funct7": 0x00},
+    {"mnemonic": "sra", "format": "R", "opcode": 0x33, "funct3": 5, "funct7": 0x20},
+    {"mnemonic": "or", "format": "R", "opcode": 0x33, "funct3": 6, "funct7": 0x00},
+    {"mnemonic": "and", "format": "R", "opcode": 0x33, "funct3": 7, "funct7": 0x00},
+    {"mnemonic": "addi", "format": "I", "opcode": 0x13, "funct3": 0},
+    {"mnemonic": "slti", "format": "I", "opcode": 0x13, "funct3": 2},
+    {"mnemonic": "sltiu", "format": "I", "opcode": 0x13, "funct3": 3},
+    {"mnemonic": "xori", "format": "I", "opcode": 0x13, "funct3": 4},
+    {"mnemonic": "ori", "format": "I", "opcode": 0x13, "funct3": 6},
+    {"mnemonic": "andi", "format": "I", "opcode": 0x13, "funct3": 7},
+    {"mnemonic": "slli", "format": "I", "opcode": 0x13, "funct3": 1, "shift_upper_bits": 0x00},
+    {"mnemonic": "srli", "format": "I", "opcode": 0x13, "funct3": 5, "shift_upper_bits": 0x00},
+    {"mnemonic": "srai", "format": "I", "opcode": 0x13, "funct3": 5, "shift_upper_bits": 0x20},
+    {"mnemonic": "lb", "format": "I", "opcode": 0x03, "funct3": 0},
+    {"mnemonic": "lh", "format": "I", "opcode": 0x03, "funct3": 1},
+    {"mnemonic": "lw", "format": "I", "opcode": 0x03, "funct3": 2},
+    {"mnemonic": "lbu", "format": "I", "opcode": 0x03, "funct3": 4},
+    {"mnemonic": "lhu", "format": "I", "opcode": 0x03, "funct3": 5},
+    {"mnemonic": "jalr", "format": "I", "opcode": 0x67, "funct3": 0},
+    {"mnemonic": "sb", "format": "S", "opcode": 0x23, "funct3": 0},
+    {"mnemonic": "sh", "format": "S", "opcode": 0x23, "funct3": 1},
+    {"mnemonic": "sw", "format": "S", "opcode": 0x23, "funct3": 2},
+    {"mnemonic": "beq", "format": "B", "opcode": 0x63, "funct3": 0},
+    {"mnemonic": "bne", "format": "B", "opcode": 0x63, "funct3": 1},
+    {"mnemonic": "blt", "format": "B", "opcode": 0x63, "funct3": 4},
+    {"mnemonic": "bge", "format": "B", "opcode": 0x63, "funct3": 5},
+    {"mnemonic": "bltu", "format": "B", "opcode": 0x63, "funct3": 6},
+    {"mnemonic": "bgeu", "format": "B", "opcode": 0x63, "funct3": 7},
+    {"mnemonic": "lui", "format": "U", "opcode": 0x37},
+    {"mnemonic": "auipc", "format": "U", "opcode": 0x17},
+    {"mnemonic": "jal", "format": "J", "opcode": 0x6F},
     # FENCE.TSO is a named encoding of the RV32I FENCE instruction.
-    InstructionDefinition("fence.tso", "I", 0x0F, 0,
-                          encoding_mask=0xFFFFFFFF, encoding_value=0x8330000F,
-                          operand_kind="fence"),
-    InstructionDefinition("fence", "I", 0x0F, 0, operand_kind="fence"),
-    InstructionDefinition("ecall", "I", 0x73, 0,
-                          encoding_mask=0xFFFFFFFF, encoding_value=0x00000073,
-                          operand_kind="system"),
-    InstructionDefinition("ebreak", "I", 0x73, 0,
-                          encoding_mask=0xFFFFFFFF, encoding_value=0x00100073,
-                          operand_kind="system"),
-)
+    {"mnemonic": "fence.tso", "format": "I", "opcode": 0x0F,
+     "funct3": 0, "encoding_mask": 0xFFFFFFFF,
+     "encoding_value": 0x8330000F, "operand_kind": "fence"},
+    {"mnemonic": "fence", "format": "I", "opcode": 0x0F,
+     "funct3": 0, "operand_kind": "fence"},
+    {"mnemonic": "ecall", "format": "I", "opcode": 0x73,
+     "funct3": 0, "encoding_mask": 0xFFFFFFFF,
+     "encoding_value": 0x00000073, "operand_kind": "system"},
+    {"mnemonic": "ebreak", "format": "I", "opcode": 0x73,
+     "funct3": 0, "encoding_mask": 0xFFFFFFFF,
+     "encoding_value": 0x00100073, "operand_kind": "system"},
+]
 
 
-def find_definition(word: int) -> InstructionDefinition | None:
-    """Match the complete encoding constraints of an approved instruction."""
+def find_definition(word):
+    """Find the instruction whose encoding matches this word."""
     opcode = get_bits(word, 0, 6)
+    funct3 = get_bits(word, 12, 14)
+    funct7 = get_bits(word, 25, 31)
+
     for definition in DEFINITIONS:
-        if definition.opcode != opcode:
+        if definition["opcode"] != opcode:
             continue
-        if definition.funct3 is not None and get_bits(word, 12, 14) != definition.funct3:
+        if "funct3" in definition and definition["funct3"] != funct3:
             continue
-        if definition.funct7 is not None and get_bits(word, 25, 31) != definition.funct7:
+        if "funct7" in definition and definition["funct7"] != funct7:
             continue
-        if (definition.shift_upper_bits is not None
-                and get_bits(word, 25, 31) != definition.shift_upper_bits):
+        if ("shift_upper_bits" in definition
+                and definition["shift_upper_bits"] != funct7):
             continue
-        if word & definition.encoding_mask != definition.encoding_value:
+        mask = definition.get("encoding_mask", 0)
+        value = definition.get("encoding_value", 0)
+        if word & mask != value:
             continue
         return definition
+
     return None

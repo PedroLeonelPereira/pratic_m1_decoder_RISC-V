@@ -43,4 +43,6 @@ Pseudoinstruções comuns de uma única palavra são reconhecidas conforme o [ma
 python3 -m unittest discover -s tests -v
 ```
 
-`src/parser` transforma texto em pares PC/palavra. `src/decoder` contém tabela, decodificação e imediatos. `src/models/instruction.py` mantém os dados da instrução, incluindo `None` para campos que não existem no formato. `src/assembler` gera assembly com nomes ABI, `src/statistics` calcula R5, e `src/output.py` formata a listagem. `main.py` apenas coordena essas partes. O modelo estruturado preserva os dados necessários para a futura Etapa 2, sem implementar análise de hazards agora.
+`src/parser` transforma texto em pares PC/palavra. `src/decoder` contém tabela, decodificação e imediatos. `src/models/instruction.py` cria um dicionário com todos os dados da instrução; campos que não existem no formato ficam como `None`. `src/assembler` gera assembly com nomes ABI, `src/statistics` calcula R5, e `src/output.py` formata a listagem. `main.py` apenas coordena essas partes. O dicionário preserva os dados necessários para a futura Etapa 2, sem implementar análise de hazards agora.
+
+O código-fonte usa funções, condicionais, laços, listas e dicionários para facilitar a apresentação por quem está aprendendo Python. A tabela de instruções é uma lista de dicionários: cada item nomeia o mnemônico, o formato e os bits que identificam a codificação. A configuração de CPI também é um dicionário. Erros de entrada são apresentados com uma mensagem em `ValueError`.

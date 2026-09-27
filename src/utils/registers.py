@@ -8,7 +8,7 @@ ABI_REGISTERS = (
 )
 
 
-def register_name(register: int) -> str:
+def register_name(register):
     """Return the ABI name of register x0 through x31."""
     if not 0 <= register < len(ABI_REGISTERS):
         raise ValueError(f"Invalid register: {register}")

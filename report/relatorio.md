@@ -16,11 +16,11 @@ O programa lê uma ROM textual de instruções RISC-V de 32 bits, decodifica cad
 
 ## Decodificação e extensão futura
 
-`Instruction` separa palavra de máquina e dados decodificados da representação em assembly. Somente campos existentes recebem valores; os demais permanecem `None`. A distinção é essencial para evitar falsas dependências de registradores na Etapa 2. Bits 31–25 das instruções de deslocamento imediato validam a codificação, mas não são expostos como campo `funct7` do formato I. `fence`, `ecall` e `ebreak` também não expõem `rd` ou `rs1` como operandos de registrador.
+O dicionário da instrução separa palavra de máquina e dados decodificados da representação em assembly. Somente campos existentes recebem valores; os demais permanecem `None`. A distinção é essencial para evitar falsas dependências de registradores na Etapa 2. Bits 31–25 das instruções de deslocamento imediato validam a codificação, mas não são expostos como campo `funct7` do formato I. `fence`, `ecall` e `ebreak` também não expõem `rd` ou `rs1` como operandos de registrador.
 
-## Testes executados
+## Cobertura de testes
 
-`python3 -m unittest discover -s tests -v` cobre parser, campos dos seis formatos, diferenciação por opcode/funct3/funct7, imediatos com sinal, pseudoinstruções, destinos absolutos, palavras inválidas e estatísticas. As ROMs `examples/teste_hex.txt` e `examples/teste_bin.txt` contêm pelo menos uma instrução de cada formato e um `beq` com deslocamento `-8`. O caso `0xFE628CE3` resulta em `beq`, `rs1=5`, `rs2=6`, imediato `-8` e `rd=None`. `examples/casos_invalidos.txt` demonstra continuidade depois de palavras inválidas.
+Os testes automatizados cobrem parser, campos dos seis formatos, diferenciação por opcode/funct3/funct7, imediatos com sinal, pseudoinstruções, destinos absolutos, palavras inválidas e estatísticas. As ROMs `examples/teste_hex.txt` e `examples/teste_bin.txt` contêm pelo menos uma instrução de cada formato e um `beq` com deslocamento `-8`. O caso `0xFE628CE3` resulta em `beq`, `rs1=5`, `rs2=6`, imediato `-8` e `rd=None`. `examples/casos_invalidos.txt` demonstra continuidade depois de palavras inválidas. Para executar: `python3 -m unittest discover -s tests -v`.
 
 ## Critério para palavras inválidas
 

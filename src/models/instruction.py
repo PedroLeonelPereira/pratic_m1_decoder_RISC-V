@@ -1,26 +1,26 @@
-"""Structured result of decoding one 32-bit machine word."""
-
-from dataclasses import dataclass
+"""Create the dictionary used to store one decoded instruction."""
 
 
-@dataclass
-class Instruction:
-    pc: int
-    word: int
-    format: str | None = None
-    mnemonic: str | None = None
-    opcode: int | None = None
-    rd: int | None = None
-    rs1: int | None = None
-    rs2: int | None = None
-    funct3: int | None = None
-    funct7: int | None = None
-    immediate: int | None = None
-    assembly: str | None = None
-    pseudo: str | None = None
-    target: int | None = None
-    fence_mode: int | None = None
-    fence_predecessor: int | None = None
-    fence_successor: int | None = None
-    valid: bool = True
-    error: str | None = None
+def new_instruction(pc, word):
+    """Return an instruction with every field initialized."""
+    return {
+        "pc": pc,
+        "word": word,
+        "format": None,
+        "mnemonic": None,
+        "opcode": None,
+        "rd": None,
+        "rs1": None,
+        "rs2": None,
+        "funct3": None,
+        "funct7": None,
+        "immediate": None,
+        "assembly": None,
+        "pseudo": None,
+        "target": None,
+        "fence_mode": None,
+        "fence_predecessor": None,
+        "fence_successor": None,
+        "valid": True,
+        "error": None,
+    }

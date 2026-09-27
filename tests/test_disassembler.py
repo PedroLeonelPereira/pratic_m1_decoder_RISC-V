@@ -32,8 +32,8 @@ class DisassemblerTests(unittest.TestCase):
     def test_pseudo_output_preserves_machine_mnemonic(self):
         nop = decode(0, 0x00000013)
         ret = decode(4, 0x00008067)
-        self.assertEqual((nop.mnemonic, to_assembly(nop)), ("addi", "nop"))
-        self.assertEqual((ret.mnemonic, to_assembly(ret)), ("jalr", "ret"))
+        self.assertEqual((nop["mnemonic"], to_assembly(nop)), ("addi", "nop"))
+        self.assertEqual((ret["mnemonic"], to_assembly(ret)), ("jalr", "ret"))
         self.assertEqual(to_assembly(decode(0, 0x00100013)), "addi zero, zero, 1")
 
     def test_branch_and_jump_show_absolute_target(self):
@@ -64,7 +64,7 @@ class DisassemblerTests(unittest.TestCase):
             with self.subTest(pseudo=pseudo):
                 item = decode(0, word)
                 self.assertEqual(to_pseudo_assembly(item), pseudo)
-                self.assertNotEqual(item.mnemonic, pseudo.split()[0])
+                self.assertNotEqual(item["mnemonic"], pseudo.split()[0])
         self.assertEqual(to_assembly(decode(0, 0x00500413)), "addi s0, zero, 5")
         self.assertIsNone(to_pseudo_assembly(decode(0, 0x00100013)))
 

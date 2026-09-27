@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.parser.input_parser import InputFormatError, parse_file
+from src.parser.input_parser import parse_file
 
 
 class ParserTests(unittest.TestCase):
@@ -29,11 +29,11 @@ class ParserTests(unittest.TestCase):
         for text, message in (("123\n", "32 bits"),
                               ("00500G13\n", "hexadecimal"),
                               ("0" * 31 + "2\n", "binary")):
-            with self.subTest(text=text), self.assertRaisesRegex(InputFormatError, message):
+            with self.subTest(text=text), self.assertRaisesRegex(ValueError, message):
                 self.parse_text(text)
 
     def test_mixed_formats_are_rejected(self):
-        with self.assertRaisesRegex(InputFormatError, "Line 2: mixed"):
+        with self.assertRaisesRegex(ValueError, "Line 2: mixed"):
             self.parse_text("00500413\n" + "0" * 32 + "\n")
 
     def test_missing_file_is_explicit(self):
