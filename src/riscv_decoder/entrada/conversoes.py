@@ -1,20 +1,11 @@
 # converte representacoes binarias em numeros
 
 def binario_para_inteiro_sem_sinal(bits):
-    valor = 0
-    for caractere in bits:
-        valor = valor * 2
-        if caractere == "1":
-            valor = valor + 1
-    return valor
+    return int(bits, 2)
 
 
 def binario_para_inteiro_com_sinal(bits):
-    valor = 0
-    for caractere in bits:
-        valor = valor * 2
-        if caractere == "1":
-            valor = valor + 1
+    valor = int(bits, 2)
     if bits[0:1] == "1":
         potencia = 1
         contador = 0
