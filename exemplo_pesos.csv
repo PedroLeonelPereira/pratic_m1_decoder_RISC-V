@@ -1,0 +1,8 @@
+# exemplo de pesos de cpi por formato, sem cabecalho
+# uma linha por formato: FORMATO,peso
+R,2
+I,5
+S,3
+B,4
+U,2
+J,3
