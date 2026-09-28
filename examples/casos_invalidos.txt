@@ -1,4 +1,0 @@
-0x00500413
-0xFFFFFFFF  # opcode desconhecido
-0x02000033  # opcode conhecido, codificação não aprovada
-0x00C58633  # processamento continua
