@@ -4,8 +4,9 @@ Decodificador de instruções da base inteira **RV32I** (menos `fence`, `ecall`,
 feito para quem tem conhecimento básico em lógica de programação.
 
 Você entrega um arquivo texto com **uma instrução por linha** (hexadecimal ou binário)
-e o programa imprime, para cada linha, o **formato, mnemônico, registradores em nome
-ABI, imediato decimal com sinal, funct3/funct7 e a linha em assembly**.
+e o programa imprime, para cada linha, o **formato (um dos 6 clássicos
+R/I/S/B/U/J), mnemônico, registradores em nome ABI, imediato decimal com
+sinal, funct3/funct7 em decimal e a linha em assembly**.
 No final, imprime um **resumo de CPI médio** por formato.
 
 Público e estilo: código **verboso e explícito** é melhor que código curto e esperto.
@@ -27,24 +28,33 @@ caminho do arquivo: exemplo_hex.txt
 caminho do csv de pesos: exemplo_pesos.csv
 ```
 
-Exemplo mínimo de sessão (arquivo com 1 instrução):
+Exemplo mínimo de sessão (arquivo com 1 instrução, saída real atual):
 
 ```text
 caminho do arquivo: exemplo_hex.txt
 caminho do csv de pesos: exemplo_pesos.csv
+
 formato: R
 mnemonico: add
 rd: a1
 rs1: a1
 rs2: a2
-f3: 000
-f7: 0000000
+f3: 0
+f7: 0
 assembly: add a1,a1,a2
 ...
 Instrucoes totais = 20
 Instrucoes por formato, R = 10.0% I = 50.0% S = 10.0% B = 15.0% U = 10.0% J = 5.0%
 CPI medio = 3.95
 ```
+
+Repare em três detalhes da saída atual:
+
+- Há uma **linha em branco antes de cada instrução** (`print("")` no início de
+  `mostrar_resultado`).
+- `f3`/`f7` saem em **decimal** (`f3: 0`, `f7: 32`), não em binário.
+- `formato` sai sempre num dos 6 clássicos (`R I S B U J`): `load`/`jalr`
+  aparecem como `I`, `lui`/`auipc` como `U` (ver seção 7).
 
 Não há argumentos de linha de comando, saída em arquivo, JSON ou interface gráfica.
 Não há testes automatizados no repositório (ver seção 12).
@@ -89,7 +99,9 @@ Responsabilidade de cada camada:
 | Saída | `instrucoes/comum.py:mostrar_resultado` | imprime só campos existentes em ordem fixa + `assembly` | nunca inventa campo ausente |
 | Extra | `pseudo.py`, `cpi.py` | linha `pseudo:` e resumo de CPI | nunca troca o assembly real pelo pseudo |
 
-Import entre arquivos locais é liberado para não duplicar código. Exemplo
+Import entre arquivos locais é liberado para não duplicar código. Os imports
+são curtos, sem pacote (`src/riscv_decoder` entra no caminho quando se roda
+`python src/riscv_decoder/main.py`). Exemplo
 (`src/riscv_decoder/decoder.py:1-17`):
 
 ```python
@@ -99,6 +111,17 @@ from instrucoes.comum import mostrar_resultado
 from instrucoes.aritmetica import decodificar_tipo_r
 from instrucoes.aritmetica import decodificar_tipo_i
 from cpi import ler_pesos_csv
+from cpi import agrupar_formato
+from cpi import mostrar_resumo_cpi
+```
+
+E a saída genérica também reaproveita o agrupamento do CPI
+(`src/riscv_decoder/instrucoes/comum.py:1-4`):
+
+```python
+from config import tabela_abi
+from entrada.conversoes import binario_para_inteiro_sem_sinal
+from cpi import agrupar_formato
 ```
 
 E o ponto de entrada (`src/riscv_decoder/main.py:1-11`) é propositalmente fino:
@@ -151,8 +174,8 @@ def completar_32(bits):
 Exemplo: `completar_32("1")` devolve 31 zeros + `"1"`.
 
 `src/riscv_decoder/entrada/linhas.py:8-23` valida dígito por dígito com
-comparação de texto (`"0"`, `"9"`, `"A"`, `"F"`, `"a"`, `"f"`) e só depois usa
-as duas conversões de base liberadas no projeto:
+comparação de faixa (`<`, `>` contra `"0"`, `"9"`, `"A"`, `"F"`, `"a"`, `"f"`)
+e só depois usa as duas conversões de base liberadas no projeto:
 
 ```python
 numero = int(texto, 16)
@@ -172,7 +195,16 @@ def decodificar_e_mostrar(bits):
         mostrar_resultado("invalida", "", "", "", "", "", "", "", "")
         return
     # monta "validos" só com 0/1 e compara com a entrada
-    # ...
+    validos = ""
+    for caractere in bits:
+        if caractere == "0":
+            validos = validos + "0"
+        else:
+            if caractere == "1":
+                validos = validos + "1"
+    if validos != bits:
+        mostrar_resultado("invalida", "", "", "", "", "", "", "", "")
+        return
     opcode = bits[25:32]
     tipo = identificar_tipo(opcode)
     if tipo == "invalida":
@@ -185,7 +217,9 @@ def decodificar_e_mostrar(bits):
 ```
 
 Repare: o opcode são sempre os **últimos 7 caracteres** (`bits[25:32]`),
-porque a string está em ordem arquitetural (bit 31 primeiro).
+porque a string está em ordem arquitetural (bit 31 primeiro). E a validação
+de caracteres é por reconstrução: qualquer coisa fora de `0`/`1` faz
+`validos != bits` e cai em inválida.
 
 `src/riscv_decoder/decoder.py:69-108` (`programa_principal`) faz o laço:
 
@@ -193,6 +227,7 @@ porque a string está em ordem arquitetural (bit 31 primeiro).
 caminho = input("caminho do arquivo: ")
 caminho_pesos = input("caminho do csv de pesos: ")
 peso_r, peso_i, peso_s, peso_b, peso_u, peso_j = ler_pesos_csv(caminho_pesos)
+# ... cont_r, cont_i, cont_s, cont_b, cont_u, cont_j zerados
 arquivo = open(caminho)
 for linha in arquivo:
     normalizada = normalizar_linha(linha)
@@ -201,10 +236,17 @@ for linha in arquivo:
             mostrar_resultado("invalida", "", "", "", "", "", "", "", "")
         else:
             decodificar_e_mostrar(normalizada)
-            # ... conta por formato para o CPI
+            opcode = normalizada[25:32]
+            tipo = identificar_tipo(opcode)
+            grupo = agrupar_formato(tipo)
+            # ... conta cont_r/cont_i/... pelo GRUPO clássico
 arquivo.close()
 mostrar_resumo_cpi(...)
 ```
+
+Ou seja: a contagem do CPI usa o **grupo clássico** (`agrupar_formato`),
+não o tipo interno — `load`/`jalr` incrementam `cont_i`, `lui`/`auipc`
+incrementam `cont_u`. Tipo inválido devolve grupo `""` e não entra na conta.
 
 Inválida **nunca aborta**: imprime só `instrucao invalida` e segue para a
 próxima linha.
@@ -240,7 +282,9 @@ def identificar_tipo(opcode):
 
 Por que `load`, `jalr`, `lui`, `auipc` são tipos separados se o formato é
 I ou U? Porque o **template de assembly** e os campos impressos são diferentes
-(ver seção 7). O `cpi.py` reagrupa depois (seção 9).
+(ver seção 7). O `cpi.py` reagrupa depois (seção 9) — e a saída também:
+`mostrar_resultado` chama `agrupar_formato(tipo)` antes de imprimir, então
+`load`/`jalr` saem como `formato: I` e `lui`/`auipc` como `formato: U`.
 
 ### 5.2 funct3/funct7 -> mnemônico
 
@@ -277,26 +321,16 @@ Tabela completa suportada (toda a base RV32I menos sistema):
 
 ### 6.1 Binário texto -> inteiro (`src/riscv_decoder/entrada/conversoes.py`)
 
-Sem operadores binários: laço de `valor = valor * 2`, soma `1` quando o
-caractere é `"1"`. Com sinal, se o primeiro bit é `"1"`, subtrai `2^len`
-calculado com `while`:
+Versão atual, curta e direta: `int(bits, 2)` faz a conversão; com sinal,
+se o primeiro bit é `"1"`, subtrai `2^len` calculado com `while`:
 
 ```python
 def binario_para_inteiro_sem_sinal(bits):
-    valor = 0
-    for caractere in bits:
-        valor = valor * 2
-        if caractere == "1":
-            valor = valor + 1
-    return valor
+    return int(bits, 2)
 
 
 def binario_para_inteiro_com_sinal(bits):
-    valor = 0
-    for caractere in bits:
-        valor = valor * 2
-        if caractere == "1":
-            valor = valor + 1
+    valor = int(bits, 2)
     if bits[0:1] == "1":
         potencia = 1
         contador = 0
@@ -339,38 +373,57 @@ nunca número `x10`.
 
 ## 7. Saída: só campos existentes + `assembly`
 
-`src/riscv_decoder/instrucoes/comum.py:9-27`:
+`src/riscv_decoder/instrucoes/comum.py:11-35`:
 
 ```python
 def mostrar_resultado(tipo, nome, rd, rs1, rs2, imm, f3, f7, montada):
+    print("")
     if tipo == "invalida":
         print("instrucao invalida")
         return
-    print("formato: " + tipo)
+    formato = agrupar_formato(tipo)
+    if formato == "":
+        formato = tipo
+    print("formato: " + formato)
     print("mnemonico: " + nome)
     if rd != "":
         print("rd: " + rd)
     if rs1 != "":
         print("rs1: " + rs1)
-    # ... rs2, imm, f3, f7
+    # ... rs2, imm
+    if f3 != "":
+        valor_f3 = binario_para_inteiro_sem_sinal(f3)
+        print("f3: " + str(valor_f3))
+    if f7 != "":
+        valor_f7 = binario_para_inteiro_sem_sinal(f7)
+        print("f7: " + str(valor_f7))
     print("assembly: " + montada)
 ```
 
 Ordem fixa: `formato, mnemonico, rd, rs1, rs2, imm, f3, f7` + linha `assembly`.
-Campo vazio (`""`) **nem aparece**. Inválida imprime só `instrucao invalida`.
+Campo vazio (`""`) **nem aparece**. Inválida imprime linha em branco +
+`só instrucao invalida`. Três comportamentos novos em relação à primeira
+versão, todos visíveis no código acima:
 
-Exemplos reais por tipo (de `exemplo_hex.txt`):
+1. Começa com `print("")` — cada instrução é separada por linha em branco.
+2. `formato` passa por `agrupar_formato`: `load`/`jalr` viram `I`,
+   `lui`/`auipc` viram `U`. A saída só mostra os 6 clássicos.
+3. `f3`/`f7` são convertidos para **decimal** antes de imprimir
+   (`"000"` -> `0`, `"0100000"` -> `32`).
+
+Exemplos reais por tipo (de `exemplo_hex.txt`, saída copiada do programa):
 
 **R** — `0x00c585b3`:
 
 ```text
+
 formato: R
 mnemonico: add
 rd: a1
 rs1: a1
 rs2: a2
-f3: 000
-f7: 0000000
+f3: 0
+f7: 0
 assembly: add a1,a1,a2
 ```
 
@@ -381,12 +434,13 @@ Código (`src/riscv_decoder/instrucoes/aritmetica.py:11-25`): fatia
 **I aritmético** — `0x00c10513` (`addi a0,sp,12`):
 
 ```text
+
 formato: I
 mnemonico: addi
 rd: a0
 rs1: sp
 imm: 12
-f3: 000
+f3: 0
 assembly: addi a0,sp,12
 ```
 
@@ -396,44 +450,51 @@ convertido com sinal.
 **I shift** — `0x00331293` (`slli t0,t1,3`):
 
 ```text
+
 formato: I
 mnemonico: slli
 rd: t0
 rs1: t1
 imm: 3
-f3: 001
-f7: 0000000
+f3: 1
+f7: 0
 assembly: slli t0,t1,3
 ```
 
-Aqui o imediato é só `bits[7:12]` convertido **sem** sinal.
+Aqui o imediato é só `bits[7:12]` convertido **sem** sinal. `f3: 1`
+é o binário `"001"` em decimal; `f7: 0` é `"0000000"` (para `srai` sai
+`f3: 5`, `f7: 32`).
 
 **Load** — `0x00c12503` (`lw a0,12(sp)`):
 
 ```text
-formato: load
+
+formato: I
 mnemonico: lw
 rd: a0
 rs1: sp
 imm: 12
-f3: 010
+f3: 2
 assembly: lw a0,12(sp)
 ```
 
 Template travado: `nome + " " + rd + "," + imm + "(" + rs1 + ")"`.
+O `formato` impresso é `I` (agrupado), embora o tipo interno seja `load`.
 
 **jalr** — `0x000100e7` (`jalr ra,0(sp)`): mesmo template do load, mas
-`formato: jalr` e `f3` precisa ser `000`.
+`formato: I` (tipo interno `jalr` agrupado) e `f3` precisa ser `000`
+(impresso como `f3: 0`), senão é inválida.
 
 **S** — `0x00640423` (`sb t1,8(s0)`):
 
 ```text
+
 formato: S
 mnemonico: sb
 rs1: s0
 rs2: t1
 imm: 8
-f3: 000
+f3: 0
 assembly: sb t1,8(s0)
 ```
 
@@ -449,12 +510,13 @@ onde `pedaco_alto = bits[0:7]` e `pedaco_baixo = bits[20:25]`.
 **B** — `0x00628663` (`beq t0,t1,12`):
 
 ```text
+
 formato: B
 mnemonico: beq
 rs1: t0
 rs2: t1
 imm: 12
-f3: 000
+f3: 0
 assembly: beq t0,t1,12
 ```
 
@@ -468,7 +530,8 @@ pedaco_imm = pedaco_12 + pedaco_11 + pedaco_10_5 + pedaco_4_1 + "0"
 **lui** — `0x12345537` (`lui a0,305418240`):
 
 ```text
-formato: lui
+
+formato: U
 mnemonico: lui
 rd: a0
 imm: 305418240
@@ -476,12 +539,15 @@ assembly: lui a0,305418240
 ```
 
 Sem `f3`/`f7`. Imediato: `bits[0:20] + "000000000000"` com sinal.
+O `formato` impresso é `U` (tipo interno `lui` agrupado).
 
-**auipc** — `0x00001117`: igual ao `lui`, mas `formato: auipc`.
+**auipc** — `0x00001117`: igual ao `lui`, mas `mnemonico: auipc` e
+`formato: U` (saída real: `auipc sp,4096`).
 
 **J** — `0x010000ef` (`jal ra,16`):
 
 ```text
+
 formato: J
 mnemonico: jal
 rd: ra
@@ -498,10 +564,11 @@ pedaco_imm = pedaco_20 + pedaco_19_12 + pedaco_11 + pedaco_10_1 + "0"
 **Inválida** — opcode desconhecido, funct inválido ou caractere errado:
 
 ```text
+
 instrucao invalida
 ```
 
-Só isso, sem campos, e o laço continua.
+Só isso (precedido da linha em branco padrão), sem campos, e o laço continua.
 
 ## 8. Pseudo-instruções: `nop mv j ret`
 
@@ -550,18 +617,19 @@ Negativos que **não** geram pseudo (testados na spec):
 Saída real completa do `nop`, para ver a ordem (real antes, pseudo depois):
 
 ```text
+
 formato: I
 mnemonico: addi
 rd: zero
 rs1: zero
 imm: 0
-f3: 000
+f3: 0
 assembly: addi zero,zero,0
 pseudo: nop
 ```
 
 Integração sem tocar a impressão genérica (exemplo em
-`src/riscv_decoder/instrucoes/aritmetica.py:70-74`):
+`src/riscv_decoder/instrucoes/aritmetica.py:71-74`):
 
 ```python
 mostrar_resultado("I", nome, rd, rs1, "", imm, f3, "", montada)
@@ -588,7 +656,9 @@ J,3
 Linha vazia e `#` pulam; linha ruim mantém peso zero e segue.
 
 Agrupamento (`src/riscv_decoder/cpi.py:10-29`): os 9 tipos internos viram
-os 6 clássicos — `load` e `jalr` contam como `I`, `lui` e `auipc` como `U`:
+os 6 clássicos — `load` e `jalr` contam como `I`, `lui` e `auipc` como `U`.
+O mesmo `agrupar_formato` é usado na hora de imprimir (`comum.py`), então
+o `formato` da saída e a conta do CPI nunca divergem:
 
 ```python
 def agrupar_formato(tipo):
@@ -678,5 +748,7 @@ imediato em decimal com sinal.
 - Pseudos só `nop mv j ret` (sem `li jr beqz neg not` e família).
 - Pseudo nunca substitui o real; `j 0` conta como pseudo válida.
 - Sem testes automatizados, sem CLI com argumentos, sem saída em arquivo/JSON/CSV.
-- `README.md` estava vazio antes desta escrita; `pyproject.toml` declara
-  `riscv-decoder = "riscv_decoder.decoder:main"`.
+- `pyproject.toml` declara `riscv-decoder = "riscv_decoder.decoder:main"`.
+- Histórico de simplificações já refletido acima: `formato` agrupado em
+  `mostrar_resultado`, `f3`/`f7` em decimal, linha em branco separadora e
+  `conversoes.py` reduzido a `int(bits, 2)` + ajuste de sinal.
