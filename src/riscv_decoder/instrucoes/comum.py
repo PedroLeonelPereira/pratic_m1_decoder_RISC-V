@@ -1,19 +1,19 @@
 # conversao de registradores e exibicao do resultado
 from config import tabela_abi
-from entrada.conversoes import binario_para_inteiro_sem_sinal
-from cpi import agrupar_formato
+from entrada.conversoes import binary_to_unsigned
+from cpi import group_format
 
 
-def registrador_para_abi(pedaco):
+def register_to_abi(pedaco):
     return tabela_abi[pedaco]
 
 
-def mostrar_resultado(tipo, nome, rd, rs1, rs2, imm, f3, f7, montada):
+def print_result(tipo, nome, rd, rs1, rs2, imm, f3, f7, montada):
     print("")
     if tipo == "invalida":
         print("instrucao invalida")
         return
-    formato = agrupar_formato(tipo)
+    formato = group_format(tipo)
     if formato == "":
         formato = tipo
     print("formato: " + formato)
@@ -27,9 +27,9 @@ def mostrar_resultado(tipo, nome, rd, rs1, rs2, imm, f3, f7, montada):
     if imm != "":
         print("imm: " + imm)
     if f3 != "":
-        valor_f3 = binario_para_inteiro_sem_sinal(f3)
+        valor_f3 = binary_to_unsigned(f3)
         print("f3: " + str(valor_f3))
     if f7 != "":
-        valor_f7 = binario_para_inteiro_sem_sinal(f7)
+        valor_f7 = binary_to_unsigned(f7)
         print("f7: " + str(valor_f7))
     print("assembly: " + montada)

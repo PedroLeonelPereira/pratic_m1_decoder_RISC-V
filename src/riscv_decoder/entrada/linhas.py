@@ -1,11 +1,11 @@
 # normaliza cada linha de entrada e converte hexadecimal para binario
 
-def completar_32(bits):
+def pad_to_32(bits):
     falta = 32 - len(bits)
     return "0" * falta + bits
 
 
-def hex_to_bin(texto):
+def hex_to_binary(texto):
     if texto == "":
         return "invalida"
     for caractere in texto:
@@ -23,7 +23,7 @@ def hex_to_bin(texto):
     return format(numero, "b")
 
 
-def normalizar_linha(linha_bruta):
+def clean_line(linha_bruta):
     arrumado = linha_bruta.strip()
     if arrumado == "":
         return "pular"
@@ -31,11 +31,11 @@ def normalizar_linha(linha_bruta):
         return "pular"
     binario = arrumado
     if arrumado[0:2] == "0x":
-        binario = hex_to_bin(arrumado[2:len(arrumado)])
+        binario = hex_to_binary(arrumado[2:len(arrumado)])
     else:
         if arrumado[0:2] == "0X":
-            binario = hex_to_bin(arrumado[2:len(arrumado)])
-    # hex_to_bin devolve a palavra invalida quando o texto nao e hexadecimal
+            binario = hex_to_binary(arrumado[2:len(arrumado)])
+    # hex_to_binary devolve a palavra invalida quando o texto nao e hexadecimal
     if binario == "invalida":
         return "invalida"
     # int com base 2 so valida: aceita o texto ou reclama com ValueError
@@ -45,4 +45,4 @@ def normalizar_linha(linha_bruta):
         return "invalida"
     if 32 < len(binario):
         return "invalida"
-    return completar_32(binario)
+    return pad_to_32(binario)

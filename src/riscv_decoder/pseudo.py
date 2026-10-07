@@ -3,7 +3,7 @@
 # devolve texto pseudo pronto ou vazio quando nao ha correspondencia
 
 
-def identificar_pseudo(nome, rd, rs1, imm):
+def identify_pseudo(nome, rd, rs1, imm):
     if nome == "addi":
         if rd == "zero":
             if rs1 == "zero":

@@ -1,10 +1,10 @@
 # converte representacoes binarias em numeros
 
-def binario_para_inteiro_sem_sinal(bits):
+def binary_to_unsigned(bits):
     return int(bits, 2)
 
 
-def binario_para_inteiro_com_sinal(bits):
+def binary_to_signed(bits):
     valor = int(bits, 2)
     if bits[0:1] == "1":
         potencia = 1

@@ -1,141 +1,107 @@
 # identifica formatos e mnemonicos a partir dos campos da instrucao
+# cada tabela abaixo e um map de chave para valor
+# a chave e o pedaco de bits, o valor e o nome devolvido
+# quando a chave nao esta na tabela, a instrucao e invalida
 
-def identificar_tipo(opcode):
-    if opcode == "0110011":
-        return "R"
-    if opcode == "0010011":
-        return "I"
-    if opcode == "0000011":
-        return "load"
-    if opcode == "1100111":
-        return "jalr"
-    if opcode == "0100011":
-        return "S"
-    if opcode == "1100011":
-        return "B"
-    if opcode == "0110111":
-        return "lui"
-    if opcode == "0010111":
-        return "auipc"
-    if opcode == "1101111":
-        return "J"
+tabela_tipo = {
+    "0110011": "R",
+    "0010011": "I",
+    "0000011": "load",
+    "1100111": "jalr",
+    "0100011": "S",
+    "1100011": "B",
+    "0110111": "lui",
+    "0010111": "auipc",
+    "1101111": "J",
+}
+
+tabela_r = {
+    "0000000000": "add",
+    "0000100000": "sub",
+    "0010000000": "sll",
+    "0100000000": "slt",
+    "0110000000": "sltu",
+    "1000000000": "xor",
+    "1010000000": "srl",
+    "1010100000": "sra",
+    "1100000000": "or",
+    "1110000000": "and",
+}
+
+tabela_i = {
+    "000": "addi",
+    "010": "slti",
+    "011": "sltiu",
+    "100": "xori",
+    "110": "ori",
+    "111": "andi",
+}
+
+tabela_i_deslocamento = {
+    "0010000000": "slli",
+    "1010000000": "srli",
+    "1010100000": "srai",
+}
+
+tabela_load = {
+    "000": "lb",
+    "001": "lh",
+    "010": "lw",
+    "100": "lbu",
+    "101": "lhu",
+}
+
+tabela_s = {
+    "000": "sb",
+    "001": "sh",
+    "010": "sw",
+}
+
+tabela_b = {
+    "000": "beq",
+    "001": "bne",
+    "100": "blt",
+    "101": "bge",
+    "110": "bltu",
+    "111": "bgeu",
+}
+
+
+def identify_type(opcode):
+    if opcode in tabela_tipo:
+        return tabela_tipo[opcode]
     return "invalida"
 
 
-def resolver_mnemonico_r(f3, f7):
-    if f3 == "000":
-        if f7 == "0000000":
-            return "add"
-        else:
-            if f7 == "0100000":
-                return "sub"
-            else:
-                return "invalida"
-    if f3 == "001":
-        if f7 == "0000000":
-            return "sll"
-        else:
-            return "invalida"
-    if f3 == "010":
-        if f7 == "0000000":
-            return "slt"
-        else:
-            return "invalida"
-    if f3 == "011":
-        if f7 == "0000000":
-            return "sltu"
-        else:
-            return "invalida"
-    if f3 == "100":
-        if f7 == "0000000":
-            return "xor"
-        else:
-            return "invalida"
-    if f3 == "101":
-        if f7 == "0000000":
-            return "srl"
-        else:
-            if f7 == "0100000":
-                return "sra"
-            else:
-                return "invalida"
-    if f3 == "110":
-        if f7 == "0000000":
-            return "or"
-        else:
-            return "invalida"
-    if f3 == "111":
-        if f7 == "0000000":
-            return "and"
-        else:
-            return "invalida"
+def lookup_r_name(f3, f7):
+    chave = f3 + f7
+    if chave in tabela_r:
+        return tabela_r[chave]
     return "invalida"
 
 
-def resolver_mnemonico_i(f3, f7):
-    if f3 == "000":
-        return "addi"
-    if f3 == "010":
-        return "slti"
-    if f3 == "011":
-        return "sltiu"
-    if f3 == "100":
-        return "xori"
-    if f3 == "110":
-        return "ori"
-    if f3 == "111":
-        return "andi"
-    if f3 == "001":
-        if f7 == "0000000":
-            return "slli"
-        else:
-            return "invalida"
-    if f3 == "101":
-        if f7 == "0000000":
-            return "srli"
-        else:
-            if f7 == "0100000":
-                return "srai"
-            else:
-                return "invalida"
+def lookup_i_name(f3, f7):
+    if f3 in tabela_i:
+        return tabela_i[f3]
+    chave = f3 + f7
+    if chave in tabela_i_deslocamento:
+        return tabela_i_deslocamento[chave]
     return "invalida"
 
 
-def resolver_mnemonico_load(f3):
-    if f3 == "000":
-        return "lb"
-    if f3 == "001":
-        return "lh"
-    if f3 == "010":
-        return "lw"
-    if f3 == "100":
-        return "lbu"
-    if f3 == "101":
-        return "lhu"
+def lookup_load_name(f3):
+    if f3 in tabela_load:
+        return tabela_load[f3]
     return "invalida"
 
 
-def resolver_mnemonico_s(f3):
-    if f3 == "000":
-        return "sb"
-    if f3 == "001":
-        return "sh"
-    if f3 == "010":
-        return "sw"
+def lookup_s_name(f3):
+    if f3 in tabela_s:
+        return tabela_s[f3]
     return "invalida"
 
 
-def resolver_mnemonico_b(f3):
-    if f3 == "000":
-        return "beq"
-    if f3 == "001":
-        return "bne"
-    if f3 == "100":
-        return "blt"
-    if f3 == "101":
-        return "bge"
-    if f3 == "110":
-        return "bltu"
-    if f3 == "111":
-        return "bgeu"
+def lookup_b_name(f3):
+    if f3 in tabela_b:
+        return tabela_b[f3]
     return "invalida"

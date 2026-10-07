@@ -7,31 +7,28 @@
 # agrupa os 9 tipos internos do decodificador nos 6 formatos classicos
 # load e jalr sao formato I, lui e auipc sao formato U
 # devolve vazio quando o tipo e invalido
-def agrupar_formato(tipo):
-    if tipo == "R":
-        return "R"
-    if tipo == "I":
-        return "I"
-    if tipo == "load":
-        return "I"
-    if tipo == "jalr":
-        return "I"
-    if tipo == "S":
-        return "S"
-    if tipo == "B":
-        return "B"
-    if tipo == "lui":
-        return "U"
-    if tipo == "auipc":
-        return "U"
-    if tipo == "J":
-        return "J"
+tabela_formato = {
+    "R": "R",
+    "I": "I",
+    "load": "I",
+    "jalr": "I",
+    "S": "S",
+    "B": "B",
+    "lui": "U",
+    "auipc": "U",
+    "J": "J",
+}
+
+
+def group_format(tipo):
+    if tipo in tabela_formato:
+        return tabela_formato[tipo]
     return ""
 
 
 # guarda o peso lido para um formato nas variaveis de peso
 # devolve os seis pesos atualizados em ordem
-def guardar_peso(nome, valor, peso_r, peso_i, peso_s, peso_b, peso_u, peso_j):
+def save_weight(nome, valor, peso_r, peso_i, peso_s, peso_b, peso_u, peso_j):
     if nome == "R":
         return valor, peso_i, peso_s, peso_b, peso_u, peso_j
     if nome == "I":
@@ -51,7 +48,7 @@ def guardar_peso(nome, valor, peso_r, peso_i, peso_s, peso_b, peso_u, peso_j):
 # exemplo de linha: R,2
 # linha vazia e # pulam, linha ruim mantem peso zero e segue
 # devolve os seis pesos em ordem R I S B U J
-def ler_pesos_csv(caminho):
+def read_weights_csv(caminho):
     peso_r = 0
     peso_i = 0
     peso_s = 0
@@ -73,14 +70,14 @@ def ler_pesos_csv(caminho):
                     except ValueError:
                         deu_erro = "sim"
                     if deu_erro == "nao":
-                        peso_r, peso_i, peso_s, peso_b, peso_u, peso_j = guardar_peso(nome, valor, peso_r, peso_i, peso_s, peso_b, peso_u, peso_j)
+                        peso_r, peso_i, peso_s, peso_b, peso_u, peso_j = save_weight(nome, valor, peso_r, peso_i, peso_s, peso_b, peso_u, peso_j)
     arquivo.close()
     return peso_r, peso_i, peso_s, peso_b, peso_u, peso_j
 
 
 # imprime totais, porcentagem por formato e cpi medio ponderado
 # instrucao invalida nao entra na conta
-def mostrar_resumo_cpi(cont_r, cont_i, cont_s, cont_b, cont_u, cont_j, peso_r, peso_i, peso_s, peso_b, peso_u, peso_j):
+def print_cpi_summary(cont_r, cont_i, cont_s, cont_b, cont_u, cont_j, peso_r, peso_i, peso_s, peso_b, peso_u, peso_j):
     total = cont_r + cont_i + cont_s + cont_b + cont_u + cont_j
     print("Instrucoes totais = " + str(total))
     if total == 0:

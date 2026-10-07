@@ -1,25 +1,25 @@
 # ponto central do programa pede arquivo, encaminha a decodificacao e mostra cada linha
 # rode pelo arquivo principal com python src/riscv_decoder/main.py
-from entrada.linhas import normalizar_linha
-from instrucoes.identificacao import identificar_tipo
-from instrucoes.comum import mostrar_resultado
-from instrucoes.aritmetica import decodificar_tipo_r
-from instrucoes.aritmetica import decodificar_tipo_i
-from instrucoes.memoria import decodificar_load
-from instrucoes.memoria import decodificar_jalr
-from instrucoes.memoria import decodificar_tipo_s
-from instrucoes.desvios import decodificar_tipo_b
-from instrucoes.desvios import decodificar_tipo_j
-from instrucoes.constantes import decodificar_lui
-from instrucoes.constantes import decodificar_auipc
-from cpi import ler_pesos_csv
-from cpi import agrupar_formato
-from cpi import mostrar_resumo_cpi
+from entrada.linhas import clean_line
+from instrucoes.identificacao import identify_type
+from instrucoes.comum import print_result
+from instrucoes.aritmetica import decode_r_type
+from instrucoes.aritmetica import decode_i_type
+from instrucoes.memoria import decode_load
+from instrucoes.memoria import decode_jalr
+from instrucoes.memoria import decode_s_type
+from instrucoes.desvios import decode_b_type
+from instrucoes.desvios import decode_j_type
+from instrucoes.constantes import decode_lui
+from instrucoes.constantes import decode_auipc
+from cpi import read_weights_csv
+from cpi import group_format
+from cpi import print_cpi_summary
 
 
-def decodificar_e_mostrar(bits):
+def decode_and_print(bits):
     if len(bits) != 32:
-        mostrar_resultado("invalida", "", "", "", "", "", "", "", "")
+        print_result("invalida", "", "", "", "", "", "", "", "")
         return
     validos = ""
     for caractere in bits:
@@ -29,87 +29,73 @@ def decodificar_e_mostrar(bits):
             if caractere == "1":
                 validos = validos + "1"
     if validos != bits:
-        mostrar_resultado("invalida", "", "", "", "", "", "", "", "")
+        print_result("invalida", "", "", "", "", "", "", "", "")
         return
     opcode = bits[25:32]
-    tipo = identificar_tipo(opcode)
+    tipo = identify_type(opcode)
     if tipo == "invalida":
-        mostrar_resultado("invalida", "", "", "", "", "", "", "", "")
+        print_result("invalida", "", "", "", "", "", "", "", "")
         return
     if tipo == "R":
-        decodificar_tipo_r(bits)
+        decode_r_type(bits)
         return
     if tipo == "I":
-        decodificar_tipo_i(bits)
+        decode_i_type(bits)
         return
     if tipo == "load":
-        decodificar_load(bits)
+        decode_load(bits)
         return
     if tipo == "jalr":
-        decodificar_jalr(bits)
+        decode_jalr(bits)
         return
     if tipo == "S":
-        decodificar_tipo_s(bits)
+        decode_s_type(bits)
         return
     if tipo == "B":
-        decodificar_tipo_b(bits)
+        decode_b_type(bits)
         return
     if tipo == "lui":
-        decodificar_lui(bits)
+        decode_lui(bits)
         return
     if tipo == "auipc":
-        decodificar_auipc(bits)
+        decode_auipc(bits)
         return
     if tipo == "J":
-        decodificar_tipo_j(bits)
+        decode_j_type(bits)
         return
-    mostrar_resultado("invalida", "", "", "", "", "", "", "", "")
+    print_result("invalida", "", "", "", "", "", "", "", "")
 
 
-def programa_principal():
+def run_program():
     caminho = input("caminho do arquivo: ")
     caminho_pesos = input("caminho do csv de pesos: ")
-    peso_r, peso_i, peso_s, peso_b, peso_u, peso_j = ler_pesos_csv(caminho_pesos)
-    cont_r = 0
-    cont_i = 0
-    cont_s = 0
-    cont_b = 0
-    cont_u = 0
-    cont_j = 0
+    peso_r, peso_i, peso_s, peso_b, peso_u, peso_j = read_weights_csv(caminho_pesos)
+    contadores = {"R": 0, "I": 0, "S": 0, "B": 0, "U": 0, "J": 0}
     arquivo = open(caminho)
     for linha in arquivo:
-        normalizada = normalizar_linha(linha)
+        normalizada = clean_line(linha)
         if normalizada != "pular":
             if normalizada == "invalida":
-                mostrar_resultado("invalida", "", "", "", "", "", "", "", "")
+                print_result("invalida", "", "", "", "", "", "", "", "")
             else:
-                decodificar_e_mostrar(normalizada)
+                decode_and_print(normalizada)
                 opcode = normalizada[25:32]
-                tipo = identificar_tipo(opcode)
-                grupo = agrupar_formato(tipo)
-                if grupo == "R":
-                    cont_r = cont_r + 1
-                else:
-                    if grupo == "I":
-                        cont_i = cont_i + 1
-                    else:
-                        if grupo == "S":
-                            cont_s = cont_s + 1
-                        else:
-                            if grupo == "B":
-                                cont_b = cont_b + 1
-                            else:
-                                if grupo == "U":
-                                    cont_u = cont_u + 1
-                                else:
-                                    if grupo == "J":
-                                        cont_j = cont_j + 1
+                tipo = identify_type(opcode)
+                grupo = group_format(tipo)
+                if grupo in contadores:
+                    contadores[grupo] = contadores[grupo] + 1
     arquivo.close()
-    mostrar_resumo_cpi(cont_r, cont_i, cont_s, cont_b, cont_u, cont_j, peso_r, peso_i, peso_s, peso_b, peso_u, peso_j)
+    cont_r = contadores["R"]
+    cont_i = contadores["I"]
+    cont_s = contadores["S"]
+    cont_b = contadores["B"]
+    cont_u = contadores["U"]
+    cont_j = contadores["J"]
+    print_cpi_summary(cont_r, cont_i, cont_s, cont_b, cont_u, cont_j, peso_r, peso_i, peso_s, peso_b, peso_u, peso_j)
 
 
 def main():
-    programa_principal()
+    run_program()
 
 
 if __name__ == "__main__":
