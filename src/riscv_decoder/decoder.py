@@ -23,6 +23,14 @@ from pipeline import detectar_conflitos_controle
 from pipeline import delimitar_blocos_basicos
 from pipeline import detectar_conflitos_borda
 from pipeline import mostrar_controle
+from pipeline import corrigir_somente_nops
+from pipeline import corrigir_com_reordenacao
+from pipeline import descobrir_estilo_entrada
+from pipeline import gerar_nome_saida
+from pipeline import escrever_arquivo_corrigido
+from pipeline import mostrar_listagem
+from pipeline import mostrar_custo
+from pipeline import bits_para_hex_linha
 
 
 def decodificar(bits):
@@ -73,11 +81,23 @@ def run_program():
         if normalizada != "pular":
             if normalizada == "invalida":
                 registro = criar_registro("invalida", "", "", "", "", "", "", "", "", "")
+                registro["bits"] = ""
+                registro["hex"] = ""
             else:
                 registro = decodificar(normalizada)
+                registro["bits"] = normalizada
+                registro["hex"] = bits_para_hex_linha(normalizada)
+            registro["inserido"] = "nao"
+            registro["movido"] = "nao"
+            registro["endereco_original"] = 0
             lista_resultados.append(registro)
     arquivo.close()
     atribuir_enderecos(lista_resultados)
+    indice_endereco = 0
+    total_endereco = len(lista_resultados)
+    while indice_endereco < total_endereco:
+        lista_resultados[indice_endereco]["endereco_original"] = lista_resultados[indice_endereco]["endereco"]
+        indice_endereco = indice_endereco + 1
     for registro in lista_resultados:
         mostrar_registro(registro)
     lista_conflitos = detectar_conflitos_dados(lista_resultados)
@@ -86,6 +106,18 @@ def run_program():
     lista_blocos = delimitar_blocos_basicos(lista_resultados)
     lista_borda = detectar_conflitos_borda(lista_resultados)
     mostrar_controle(lista_controle, lista_blocos, lista_borda)
+    lista_nops = corrigir_somente_nops(lista_resultados)
+    lista_reord = corrigir_com_reordenacao(lista_resultados)
+    estilo = descobrir_estilo_entrada(caminho)
+    caminho_nops = gerar_nome_saida(caminho, "_nops")
+    caminho_reord = gerar_nome_saida(caminho, "_reord")
+    escrever_arquivo_corrigido(caminho_nops, lista_nops, estilo)
+    escrever_arquivo_corrigido(caminho_reord, lista_reord, estilo)
+    print("ARQUIVO SOMENTE NOPS: " + caminho_nops)
+    mostrar_listagem("LISTAGEM SOMENTE NOPS", lista_nops)
+    print("ARQUIVO REORDENACAO: " + caminho_reord)
+    mostrar_listagem("LISTAGEM REORDENACAO", lista_reord)
+    mostrar_custo(len(lista_resultados), len(lista_nops), len(lista_reord))
     cont_r = 0
     cont_i = 0
     cont_s = 0

@@ -571,6 +571,7 @@ def criar_nop():
     nop["endereco"] = 0
     nop["endereco_texto"] = ""
     nop["inserido"] = "sim"
+    nop["movido"] = "nao"
     nop["endereco_original"] = 0 - 1
     nop["bits"] = "00000000000000000000000000010011"
     nop["hex"] = "0x00000013"
@@ -598,6 +599,10 @@ def copiar_registro(registro):
     copia["endereco"] = registro["endereco"]
     copia["endereco_texto"] = registro["endereco_texto"]
     copia["inserido"] = "nao"
+    if "movido" in registro:
+        copia["movido"] = registro["movido"]
+    else:
+        copia["movido"] = "nao"
     if "endereco_original" in registro:
         copia["endereco_original"] = registro["endereco_original"]
     else:
@@ -953,3 +958,588 @@ def recalcular_desvios_e_saltos(lista_original, lista_corrigida):
                                     recodificar_com_novo_deslocamento(registro, novo_deslocamento)
         indice = indice + 1
     return lista_corrigida
+
+
+# diz se o registro e um acesso a memoria que pode se sobrepor a outro
+# carga e armazenamento sao os unicos acessos, resto nunca e memoria
+# invalida nunca e acesso, mesmo que algum campo pareca endereco
+def eh_acesso_memoria(registro):
+    if registro["tipo"] == "invalida":
+        return "nao"
+    if registro["tipo"] == "load":
+        return "sim"
+    if registro["tipo"] == "S":
+        return "sim"
+    return "nao"
+
+
+# devolve o registrador base do acesso a memoria ou vazio quando nao e acesso
+# carga e armazenamento usam rs1 como base e imm como deslocamento
+def obter_base_memoria(registro):
+    if registro["tipo"] == "load":
+        return registro["rs1"]
+    if registro["tipo"] == "S":
+        return registro["rs1"]
+    return ""
+
+
+# devolve o deslocamento decimal do acesso a memoria ou vazio quando nao e acesso
+# texto igual ao campo imm, comparado como texto para nao precisar de conta
+def obter_deslocamento_memoria(registro):
+    if registro["tipo"] == "load":
+        return registro["imm"]
+    if registro["tipo"] == "S":
+        return registro["imm"]
+    return ""
+
+
+# diz se dois acessos a memoria podem se sobrepor e nao podem trocar de ordem
+# quem nao e memoria nunca se sobrepoe por este criterio
+# base diferente e endereco desconhecido, entao preserva a ordem por prudencia
+# mesma base com mesmo deslocamento e o mesmo endereco, preserva a ordem
+# mesma base com deslocamentos diferentes sao enderecos distintos, pode trocar
+# deslocamento vazio tambem preserva, porque nao da para mostrar que e distinto
+def acessos_podem_sobrepor(primeiro, segundo):
+    if eh_acesso_memoria(primeiro) == "nao":
+        return "nao"
+    if eh_acesso_memoria(segundo) == "nao":
+        return "nao"
+    base_primeiro = obter_base_memoria(primeiro)
+    base_segundo = obter_base_memoria(segundo)
+    if base_primeiro == "":
+        return "sim"
+    if base_segundo == "":
+        return "sim"
+    if base_primeiro != base_segundo:
+        return "sim"
+    desloc_primeiro = obter_deslocamento_memoria(primeiro)
+    desloc_segundo = obter_deslocamento_memoria(segundo)
+    if desloc_primeiro == "":
+        return "sim"
+    if desloc_segundo == "":
+        return "sim"
+    if desloc_primeiro == desloc_segundo:
+        return "sim"
+    return "nao"
+
+
+# diz se trocar a ordem de dois registros muda o resultado do programa
+# leitura apos escrita, escrita apos leitura e escrita apos escrita bloqueiam
+# dois acessos a memoria que podem se sobrepor tambem bloqueiam
+# invalida nunca bloqueia, zero nunca aparece porque leitura e escrita ignoram zero
+# a verificacao vale nos dois sentidos porque a troca inverte os dois juntos
+def tem_conflito_ordenacao(primeiro, segundo):
+    if primeiro["tipo"] == "invalida":
+        return "nao"
+    if segundo["tipo"] == "invalida":
+        return "nao"
+    escrita_primeiro = obter_escrita(primeiro)
+    escrita_segundo = obter_escrita(segundo)
+    if escrita_primeiro != "":
+        if escrita_primeiro == escrita_segundo:
+            return "sim"
+    leituras_primeiro = listar_leituras(primeiro)
+    leituras_segundo = listar_leituras(segundo)
+    if escrita_primeiro != "":
+        contador = 0
+        while contador < len(leituras_segundo):
+            if leituras_segundo[contador] == escrita_primeiro:
+                return "sim"
+            contador = contador + 1
+    if escrita_segundo != "":
+        contador = 0
+        while contador < len(leituras_primeiro):
+            if leituras_primeiro[contador] == escrita_segundo:
+                return "sim"
+            contador = contador + 1
+    if acessos_podem_sobrepor(primeiro, segundo) == "sim":
+        return "sim"
+    return "nao"
+
+
+# diz se a candidata pode passar para depois do desvio sem quebrar a condicao
+# candidata que escreve registrador lido pelo desvio mudaria o caminho tomado
+# desvio nunca escreve, entao so este sentido precisa de verificacao
+# devolve sim quando e seguro e nao quando quebraria o desvio
+def candidata_segura_contra_desvio(candidata, desvio):
+    escrita = obter_escrita(candidata)
+    if escrita == "":
+        return "sim"
+    leituras = listar_leituras(desvio)
+    contador = 0
+    while contador < len(leituras):
+        if leituras[contador] == escrita:
+            return "nao"
+        contador = contador + 1
+    return "sim"
+
+
+# monta o mapa de inicio de bloco para a lista de trabalho atual
+# repete as tres regras da delimitacao sem montar os blocos de saida
+# primeira valida abre, alvo valido de desvio ou salto abre, apos desvio abre
+# devolve o dicionario de posicao para sim para consulta da reordenacao
+def construir_inicios_bloco(lista_trabalho):
+    inicios = {}
+    total = len(lista_trabalho)
+    mapa = mapa_endereco_indice(lista_trabalho)
+    indice = 0
+    achou_primeiro = "nao"
+    while indice < total:
+        registro = lista_trabalho[indice]
+        if achou_primeiro == "nao":
+            if registro["tipo"] != "invalida":
+                inicios[indice] = "sim"
+                achou_primeiro = "sim"
+        indice = indice + 1
+    indice = 0
+    while indice < total:
+        registro = lista_trabalho[indice]
+        if registro["tipo"] == "B":
+            alvo = calcular_alvo(registro)
+            if alvo in mapa:
+                destino = mapa[alvo]
+                if lista_trabalho[destino]["tipo"] != "invalida":
+                    inicios[destino] = "sim"
+        else:
+            if registro["tipo"] == "J":
+                alvo = calcular_alvo(registro)
+                if alvo in mapa:
+                    destino = mapa[alvo]
+                    if lista_trabalho[destino]["tipo"] != "invalida":
+                        inicios[destino] = "sim"
+        indice = indice + 1
+    indice = 0
+    while indice < total:
+        registro = lista_trabalho[indice]
+        if eh_desvio_ou_salto(registro) == "sim":
+            seguinte = indice + 1
+            if seguinte < total:
+                if lista_trabalho[seguinte]["tipo"] != "invalida":
+                    inicios[seguinte] = "sim"
+        indice = indice + 1
+    return inicios
+
+
+# acha o inicio do bloco basico que contem o desvio na lista de trabalho
+# comeca no proprio desvio e anda para tras ate a fronteira do bloco
+# fronteira e invalida, desvio ou salto anterior, ou proxima posicao marcada
+# desvio que abre o proprio bloco nao tem candidata, devolve a propria posicao
+def indice_inicio_bloco_de(lista_trabalho, inicios, pos_desvio):
+    inicio = pos_desvio
+    anterior = pos_desvio - 1
+    while anterior > 0 - 1:
+        registro = lista_trabalho[anterior]
+        if registro["tipo"] == "invalida":
+            return inicio
+        if eh_desvio_ou_salto(registro) == "sim":
+            return inicio
+        depois = anterior + 1
+        if depois in inicios:
+            return inicio
+        inicio = anterior
+        anterior = anterior - 1
+    return inicio
+
+
+# acha a primeira instrucao valida depois do desvio na lista de trabalho
+# e o caminho sequencial que segue o slot na execucao sem desvio
+# devolve a posicao ou negativo quando nao ha sucessor valido
+def proximo_valido_depois(lista_trabalho, pos_desvio):
+    seguinte = pos_desvio + 1
+    total = len(lista_trabalho)
+    while seguinte < total:
+        if lista_trabalho[seguinte]["tipo"] != "invalida":
+            return seguinte
+        seguinte = seguinte + 1
+    return 0 - 1
+
+
+# procura a instrucao original pelo endereco para achar o alvo do desvio
+# devolve a posicao na lista original ou negativo quando nao existe
+def procurar_posicao_por_endereco(lista_original, endereco):
+    indice = 0
+    total = len(lista_original)
+    while indice < total:
+        if lista_original[indice]["endereco"] == endereco:
+            return indice
+        indice = indice + 1
+    return 0 - 1
+
+
+# busca a candidata ao slot vinda de antes do desvio dentro do mesmo bloco
+# comeca na mais proxima do desvio e anda para tras ate o inicio do bloco
+# desvio, salto, invalida e nop nunca sao candidatos e sao pulados
+# candidata nao pode ter conflito de ordem com nenhuma intermediaria pulada
+# candidata nao pode escrever o que o desvio le, senao muda o caminho
+# candidata nao pode escrever o que o sucessor imediato de cada caminho le
+# o caminho sequencial e lido na lista de trabalho e o alvo na lista original
+# os campos nunca mudam na reordenacao, so a ordem muda, entao vale comparar
+# sucessor que le o escrito da candidata e rejeitado aqui de proposito
+# no sequencial o conflito seria corrigivel com nops depois do slot
+# mas cada slot util precisa economizar de verdade contra a tecnica so com nops
+# por isso so vale a candidata que nao cria conflito novo na saida do bloco
+# no alvo nao ha como corrigir depois, entao a rejeicao garante os dois caminhos
+# devolve a posicao da primeira candidata segura ou negativo sem candidata
+def buscar_candidata_ao_slot(lista_trabalho, lista_original, pos_desvio, inicio):
+    desvio = lista_trabalho[pos_desvio]
+    pos_sequencial = proximo_valido_depois(lista_trabalho, pos_desvio)
+    tem_alvo = "nao"
+    leituras_alvo = []
+    pos_origem = procurar_posicao_por_endereco(lista_original, desvio["endereco_original"])
+    if pos_origem != 0 - 1:
+        origem = lista_original[pos_origem]
+        alvo = calcular_alvo(origem)
+        pos_alvo = procurar_posicao_por_endereco(lista_original, alvo)
+        if pos_alvo != 0 - 1:
+            destino = lista_original[pos_alvo]
+            if destino["tipo"] != "invalida":
+                tem_alvo = "sim"
+                leituras_alvo = listar_leituras(destino)
+    candidato = pos_desvio - 1
+    while candidato > inicio - 1:
+        atual = lista_trabalho[candidato]
+        if atual["tipo"] == "invalida":
+            candidato = candidato - 1
+        else:
+            if eh_desvio_ou_salto(atual) == "sim":
+                candidato = candidato - 1
+            else:
+                if eh_nop(atual) == "sim":
+                    candidato = candidato - 1
+                else:
+                    segura = "sim"
+                    intermediario = candidato + 1
+                    while intermediario < pos_desvio:
+                        vizinho = lista_trabalho[intermediario]
+                        if vizinho["tipo"] != "invalida":
+                            if tem_conflito_ordenacao(atual, vizinho) == "sim":
+                                segura = "nao"
+                        intermediario = intermediario + 1
+                    if segura == "sim":
+                        if candidata_segura_contra_desvio(atual, desvio) == "nao":
+                            segura = "nao"
+                    if segura == "sim":
+                        escrita = obter_escrita(atual)
+                        if escrita != "":
+                            if pos_sequencial != 0 - 1:
+                                sequencial = lista_trabalho[pos_sequencial]
+                                leituras = listar_leituras(sequencial)
+                                contador = 0
+                                while contador < len(leituras):
+                                    if leituras[contador] == escrita:
+                                        segura = "nao"
+                                    contador = contador + 1
+                            if segura == "sim":
+                                if tem_alvo == "sim":
+                                    contador = 0
+                                    while contador < len(leituras_alvo):
+                                        if leituras_alvo[contador] == escrita:
+                                            segura = "nao"
+                                        contador = contador + 1
+                    if segura == "sim":
+                        return candidato
+                    candidato = candidato - 1
+    return 0 - 1
+
+
+# move a candidata de antes do desvio para o slot logo depois do desvio
+# retira da posicao antiga e insere colada no desvio na lista de trabalho
+# marca a movida para a listagem futura saber o que foi reordenado
+# a candidata fica entre o desvio e o caminho sequencial nos dois caminhos
+def mover_para_slot(lista_trabalho, pos_candidata, pos_desvio):
+    guarda = lista_trabalho[pos_candidata]
+    guarda["movido"] = "sim"
+    temporaria = []
+    indice = 0
+    total = len(lista_trabalho)
+    while indice < total:
+        if indice != pos_candidata:
+            temporaria.append(lista_trabalho[indice])
+        indice = indice + 1
+    pos_desvio_nova = pos_desvio - 1
+    nova = []
+    indice = 0
+    total = len(temporaria)
+    while indice < total:
+        nova.append(temporaria[indice])
+        if indice == pos_desvio_nova:
+            nova.append(guarda)
+        indice = indice + 1
+    return nova
+
+
+# corrige com reordenacao preenchendo cada slot com instrucao util
+# primeiro reordena a copia de trabalho movendo candidatas para os slots
+# cada desvio procura de novo porque a lista muda a cada movimento
+# depois percorre o trabalho inserindo nops minimos sem quebrar o slot
+# slot util entra colado no desvio e conta como produtor para o seguinte
+# quando o slot precisaria de nops antes, os nops entram antes do desvio
+# assim o slot continua colado e a distancia do produtor aumenta sem erro
+# desvio sem candidata ganha nop de slot igual a tecnica so com nops
+# no fim refaz enderecos e reescreve desvios e saltos para o mesmo alvo
+def corrigir_com_reordenacao(lista_resultados):
+    trabalho = []
+    indice = 0
+    total = len(lista_resultados)
+    while indice < total:
+        copia = copiar_registro(lista_resultados[indice])
+        copia["movido"] = "nao"
+        trabalho.append(copia)
+        indice = indice + 1
+    ramos = []
+    indice = 0
+    total = len(trabalho)
+    while indice < total:
+        if eh_desvio_condicional(trabalho[indice]) == "sim":
+            ramos.append(trabalho[indice]["endereco_original"])
+        indice = indice + 1
+    pos_ramo = 0
+    total_ramos = len(ramos)
+    while pos_ramo < total_ramos:
+        endereco_ramo = ramos[pos_ramo]
+        pos_desvio = 0 - 1
+        indice = 0
+        total_trabalho = len(trabalho)
+        while indice < total_trabalho:
+            registro = trabalho[indice]
+            if registro["endereco_original"] == endereco_ramo:
+                if eh_desvio_condicional(registro) == "sim":
+                    pos_desvio = indice
+            indice = indice + 1
+        if pos_desvio != 0 - 1:
+            inicios = construir_inicios_bloco(trabalho)
+            inicio = indice_inicio_bloco_de(trabalho, inicios, pos_desvio)
+            candidata = buscar_candidata_ao_slot(trabalho, lista_resultados, pos_desvio, inicio)
+            if candidata != 0 - 1:
+                trabalho = mover_para_slot(trabalho, candidata, pos_desvio)
+        pos_ramo = pos_ramo + 1
+    corrigida = []
+    ultimo_produtor = {}
+    chaves_produtor = []
+    passo = 0
+    total_trabalho = len(trabalho)
+    while passo < total_trabalho:
+        atual = trabalho[passo]
+        eh_slot_util = "nao"
+        if passo > 0:
+            anterior = trabalho[passo - 1]
+            if eh_desvio_condicional(anterior) == "sim":
+                if atual["movido"] == "sim":
+                    eh_slot_util = "sim"
+        if eh_slot_util == "sim":
+            pedidos = nops_necessarios_antes(corrigida, atual, ultimo_produtor)
+            if pedidos > 0:
+                pos_desvio_nova = len(corrigida) - 1
+                nova_corrigida = []
+                indice = 0
+                total_corr = len(corrigida)
+                while indice < total_corr:
+                    if indice == pos_desvio_nova:
+                        contador_nop = 0
+                        while contador_nop < pedidos:
+                            nop = criar_nop()
+                            nova_corrigida.append(nop)
+                            contador_nop = contador_nop + 1
+                    nova_corrigida.append(corrigida[indice])
+                    indice = indice + 1
+                corrigida = nova_corrigida
+                contador_chave = 0
+                while contador_chave < len(chaves_produtor):
+                    chave = chaves_produtor[contador_chave]
+                    posicao_antiga = ultimo_produtor[chave]
+                    if posicao_antiga > pos_desvio_nova - 1:
+                        ultimo_produtor[chave] = posicao_antiga + pedidos
+                    contador_chave = contador_chave + 1
+            copia = copiar_registro(atual)
+            corrigida.append(copia)
+            posicao_copia = len(corrigida) - 1
+            escrita = obter_escrita(atual)
+            if escrita != "":
+                if escrita in ultimo_produtor:
+                    ultimo_produtor[escrita] = posicao_copia
+                else:
+                    chaves_produtor.append(escrita)
+                    ultimo_produtor[escrita] = posicao_copia
+        else:
+            pedidos = nops_necessarios_antes(corrigida, atual, ultimo_produtor)
+            contador_nop = 0
+            while contador_nop < pedidos:
+                nop = criar_nop()
+                corrigida.append(nop)
+                contador_nop = contador_nop + 1
+            copia = copiar_registro(atual)
+            corrigida.append(copia)
+            posicao_copia = len(corrigida) - 1
+            escrita = obter_escrita(atual)
+            if escrita != "":
+                if escrita in ultimo_produtor:
+                    ultimo_produtor[escrita] = posicao_copia
+                else:
+                    chaves_produtor.append(escrita)
+                    ultimo_produtor[escrita] = posicao_copia
+            if eh_desvio_condicional(atual) == "sim":
+                proximo_util = "nao"
+                seguinte = passo + 1
+                if seguinte < total_trabalho:
+                    proximo = trabalho[seguinte]
+                    if proximo["movido"] == "sim":
+                        proximo_util = "sim"
+                if proximo_util == "nao":
+                    slot = criar_nop()
+                    corrigida.append(slot)
+        passo = passo + 1
+    atribuir_enderecos(corrigida)
+    recalcular_desvios_e_saltos(lista_resultados, corrigida)
+    return corrigida
+
+
+# descobre se o arquivo de entrada usa hexadecimal ou binario
+# le linha por linha pulando vazia e comentario como na M1
+# primeira linha util com 0x ou 0X e hex, senao e bin
+# arquivo vazio ou so com comentario devolve hex como padrao
+def descobrir_estilo_entrada(caminho):
+    estilo = "hex"
+    achou = "nao"
+    arquivo = open(caminho)
+    for linha in arquivo:
+        arrumada = linha.strip()
+        if arrumada != "":
+            if arrumada[0:1] != "#":
+                if achou == "nao":
+                    achou = "sim"
+                    if arrumada[0:2] == "0x":
+                        estilo = "hex"
+                    else:
+                        if arrumada[0:2] == "0X":
+                            estilo = "hex"
+                        else:
+                            estilo = "bin"
+    arquivo.close()
+    return estilo
+
+
+# gera o nome do arquivo de saida a partir do nome de entrada
+# insere o sufixo antes do ultimo ponto da extensao
+# exemplo entrada.txt com _nops vira entrada_nops.txt
+# sem ponto so cola o sufixo no fim
+def gerar_nome_saida(caminho, sufixo):
+    posicao_ponto = 0 - 1
+    indice = 0
+    total = len(caminho)
+    while indice < total:
+        pedaco = caminho[indice:indice + 1]
+        if pedaco == ".":
+            posicao_ponto = indice
+        indice = indice + 1
+    if posicao_ponto == 0 - 1:
+        return caminho + sufixo
+    comeco = caminho[0:posicao_ponto]
+    fim = caminho[posicao_ponto:total]
+    return comeco + sufixo + fim
+
+
+# devolve a linha pronta para o arquivo corrigido no mesmo formato da entrada
+# estilo hex usa a linha com 0x, estilo bin usa os 32 caracteres
+# invalida sem codigo vira zeros para continuar invalida e legivel de volta
+# zeros com opcode desconhecido decodificam como invalida na M1
+def linha_para_arquivo(registro, estilo):
+    if estilo == "hex":
+        if registro["hex"] != "":
+            return registro["hex"]
+        if registro["bits"] != "":
+            return bits_para_hex_linha(registro["bits"])
+        return "0x00000000"
+    if registro["bits"] != "":
+        return registro["bits"]
+    return "00000000000000000000000000000000"
+
+
+# escreve a lista corrigida num arquivo novo no mesmo formato da entrada
+# uma instrucao por linha, mesmo estilo de prefixo da entrada
+# devolve o caminho escrito para o fluxo mostrar depois
+def escrever_arquivo_corrigido(caminho_saida, lista_corrigida, estilo):
+    arquivo = open(caminho_saida, "w")
+    indice = 0
+    total = len(lista_corrigida)
+    while indice < total:
+        registro = lista_corrigida[indice]
+        linha = linha_para_arquivo(registro, estilo)
+        arquivo.write(linha + "\n")
+        indice = indice + 1
+    arquivo.close()
+    return caminho_saida
+
+
+# monta uma linha da listagem legivel com endereco, codigo e desmontada
+# marca nop criado aqui com nop inserido e movida com movido para slot
+# invalida mostra so a marca canonica para nao inventar assembly
+def montar_linha_listagem(registro):
+    endereco = registro["endereco_texto"]
+    if endereco == "":
+        endereco = "0x????????"
+    codigo = registro["hex"]
+    if codigo == "":
+        if registro["bits"] != "":
+            codigo = bits_para_hex_linha(registro["bits"])
+        else:
+            codigo = "0x00000000"
+    if registro["tipo"] == "invalida":
+        return "  " + endereco + " " + codigo + " instrucao invalida"
+    linha = "  " + endereco + " " + codigo + " " + registro["assembly"]
+    if registro["inserido"] == "sim":
+        linha = linha + " [nop inserido]"
+    else:
+        if registro["movido"] == "sim":
+            linha = linha + " [movido para slot]"
+    return linha
+
+
+# mostra a listagem legivel de um programa corrigido no console
+# titulo diz a tecnica e cada linha tem endereco, codigo e marcacao
+def mostrar_listagem(titulo, lista_corrigida):
+    print(titulo)
+    indice = 0
+    total = len(lista_corrigida)
+    while indice < total:
+        registro = lista_corrigida[indice]
+        print(montar_linha_listagem(registro))
+        indice = indice + 1
+
+
+# excecao pontual a regra de simplicidade: usa divisao (/) so aqui
+# para o percentual de acrescimo com uma casa decimal, como o cpi
+# o resto do arquivo continua so com aritmetica simples
+# devolve o texto com virgula, exemplo 75,0% e 16,7%
+# arredonda a segunda casa olhando o resto da divisao por mil
+def formatar_percentual_uma_casa(acrescentadas, original):
+    if original == 0:
+        return "0,0%"
+    numerador = acrescentadas * 1000
+    quociente = numerador / original
+    parte = int(quociente)
+    resto = quociente - parte
+    if resto < 0.5:
+        parte = parte
+    else:
+        parte = parte + 1
+    inteiro = 0
+    decimo = parte
+    while decimo > 9:
+        decimo = decimo - 10
+        inteiro = inteiro + 1
+    return str(inteiro) + "," + str(decimo) + "%"
+
+
+# mostra o relatorio de custo no formato canonico do exemplo
+# original e o tamanho da entrada, finais sao os tamanhos corrigidos
+# acrescentadas e final menos original, percentual com uma casa
+# compara as duas tecnicas lado a lado em tres linhas
+def mostrar_custo(total_original, total_nops, total_reord):
+    print("CUSTO")
+    print("  original .............. " + str(total_original) + " instrucoes")
+    acrescentadas_nops = total_nops - total_original
+    percentual_nops = formatar_percentual_uma_casa(acrescentadas_nops, total_original)
+    print("  somente nops .......... " + str(total_nops) + " instrucoes  (+" + str(acrescentadas_nops) + ", +" + percentual_nops + ")")
+    acrescentadas_reord = total_reord - total_original
+    percentual_reord = formatar_percentual_uma_casa(acrescentadas_reord, total_original)
+    print("  nops + reordenacao .... " + str(total_reord) + " instrucoes  (+" + str(acrescentadas_reord) + ", +" + percentual_reord + ")")
