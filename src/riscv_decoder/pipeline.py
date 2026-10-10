@@ -547,3 +547,133 @@ def mostrar_controle(lista_controle, lista_blocos, lista_borda):
         linha = linha + ", caminho=" + conflito["caminho"] + "]"
         print(linha)
         indice = indice + 1
+
+
+# cria um registro de nop canonico igual ao addi zero,zero,0
+# nop e o addi com destino zero, origem zero e imediato zero
+# codigo de maquina 0x00000013, formato I, nunca le nem escreve de verdade
+# endereco comeca zerado e e refeito depois, inserido marca que foi criado aqui
+def criar_nop():
+    nop = {}
+    nop["tipo"] = "I"
+    nop["formato"] = "I"
+    nop["mnemonico"] = "addi"
+    nop["rd"] = "zero"
+    nop["rs1"] = "zero"
+    nop["rs2"] = ""
+    nop["imm"] = "0"
+    nop["f3"] = "000"
+    nop["f7"] = ""
+    nop["assembly"] = "addi zero,zero,0"
+    nop["pseudo"] = "nop"
+    nop["endereco"] = 0
+    nop["endereco_texto"] = ""
+    nop["inserido"] = "sim"
+    return nop
+
+
+# copia um registro campo a campo para nao mexer no original
+# mantem todos os campos iguais, so marca que nao foi inserido
+# quem nao tem a marca ainda ganha a marca de original
+def copiar_registro(registro):
+    copia = {}
+    copia["tipo"] = registro["tipo"]
+    copia["formato"] = registro["formato"]
+    copia["mnemonico"] = registro["mnemonico"]
+    copia["rd"] = registro["rd"]
+    copia["rs1"] = registro["rs1"]
+    copia["rs2"] = registro["rs2"]
+    copia["imm"] = registro["imm"]
+    copia["f3"] = registro["f3"]
+    copia["f7"] = registro["f7"]
+    copia["assembly"] = registro["assembly"]
+    copia["pseudo"] = registro["pseudo"]
+    copia["endereco"] = registro["endereco"]
+    copia["endereco_texto"] = registro["endereco_texto"]
+    copia["inserido"] = "nao"
+    return copia
+
+
+# diz se o registro e o nop canonico addi zero,zero,0
+# confere tipo, mnemonico, destino, origem e imediato juntos
+# invalida nunca e nop, mesmo que algum campo esteja vazio
+def eh_nop(registro):
+    if registro["tipo"] != "I":
+        return "nao"
+    if registro["mnemonico"] != "addi":
+        return "nao"
+    if registro["rd"] != "zero":
+        return "nao"
+    if registro["rs1"] != "zero":
+        return "nao"
+    if registro["imm"] != "0":
+        return "nao"
+    return "sim"
+
+
+# devolve quantos nops uma distancia exige pela regra 3 menos d
+# distancia 1 pede 2 nops, distancia 2 pede 1 nop, resto pede zero
+def calcular_nops_para_distancia(distancia):
+    if distancia == 1:
+        return 2
+    if distancia == 2:
+        return 1
+    return 0
+
+
+# descobre quantos nops faltam antes do consumidor na lista ja corrigida
+# olha cada leitura e procura o produtor mais recente na lista corrigida
+# distancia e a posicao atual menos a posicao do produtor
+# quando ha duas leituras vale o maior numero de nops entre elas
+# invalida nunca pede nop porque nunca tem leitura
+def nops_necessarios_antes(lista_corrigida, registro, ultimo_produtor):
+    maior = 0
+    leituras = listar_leituras(registro)
+    posicao_atual = len(lista_corrigida)
+    contador = 0
+    while contador < len(leituras):
+        registrador = leituras[contador]
+        if registrador in ultimo_produtor:
+            posicao_produtor = ultimo_produtor[registrador]
+            distancia = posicao_atual - posicao_produtor
+            pedidos = calcular_nops_para_distancia(distancia)
+            if pedidos > maior:
+                maior = pedidos
+        contador = contador + 1
+    return maior
+
+
+# corrige o programa so com nops sem mudar a ordem das originais
+# percorre as originais em ordem e vai montando uma lista nova
+# antes de cada instrucao insere os nops minimos que faltam para ela
+# a distancia e medida na lista nova, que ja tem os nops e slots anteriores
+# por isso o slot anterior ja ajuda a afastar o proximo consumidor
+# logo apos cada desvio condicional insere um nop de slot que sempre executa
+# invalida entra na lista mas nunca pede nop e nunca vira slot
+# nop inserido nunca le nem escreve, so afasta produtor e consumidor
+# no fim refaz todos os enderecos em ordem e devolve a lista nova
+def corrigir_somente_nops(lista_resultados):
+    corrigida = []
+    ultimo_produtor = {}
+    indice = 0
+    total = len(lista_resultados)
+    while indice < total:
+        registro = lista_resultados[indice]
+        pedidos = nops_necessarios_antes(corrigida, registro, ultimo_produtor)
+        contador_nop = 0
+        while contador_nop < pedidos:
+            nop = criar_nop()
+            corrigida.append(nop)
+            contador_nop = contador_nop + 1
+        copia = copiar_registro(registro)
+        corrigida.append(copia)
+        posicao_copia = len(corrigida) - 1
+        escrita = obter_escrita(registro)
+        if escrita != "":
+            ultimo_produtor[escrita] = posicao_copia
+        if eh_desvio_condicional(registro) == "sim":
+            slot = criar_nop()
+            corrigida.append(slot)
+        indice = indice + 1
+    atribuir_enderecos(corrigida)
+    return corrigida
