@@ -11,6 +11,7 @@ def register_to_abi(pedaco):
 # monta um dicionario com o resultado da instrucao decodificada
 # sempre tem as mesmas chaves, campo ausente fica com texto vazio
 # pseudo fica com texto vazio quando nao ha correspondencia
+# endereco comeca zerado e e preenchido depois pelo modulo de pipeline
 def criar_registro(tipo, nome, rd, rs1, rs2, imm, f3, f7, montada, pseudo):
     registro = {}
     registro["tipo"] = tipo
@@ -30,13 +31,17 @@ def criar_registro(tipo, nome, rd, rs1, rs2, imm, f3, f7, montada, pseudo):
     registro["f7"] = f7
     registro["assembly"] = montada
     registro["pseudo"] = pseudo
+    registro["endereco"] = 0
+    registro["endereco_texto"] = ""
     return registro
 
 
 # mostra um registro na ordem fixa de campos, omitindo ausentes
-# invalida imprime so a marca canonica e segue
+# invalida imprime endereco quando existe e so a marca canonica e segue
 def mostrar_registro(registro):
     print("")
+    if registro["endereco_texto"] != "":
+        print("endereco: " + registro["endereco_texto"])
     if registro["tipo"] == "invalida":
         print("instrucao invalida")
         return

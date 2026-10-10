@@ -16,6 +16,9 @@ from instructions.constants import decode_lui
 from instructions.constants import decode_auipc
 from cpi import read_weights_csv
 from cpi import print_cpi_summary
+from pipeline import atribuir_enderecos
+from pipeline import detectar_conflitos_dados
+from pipeline import mostrar_conflitos_dados
 
 
 def decodificar(bits):
@@ -69,8 +72,12 @@ def run_program():
             else:
                 registro = decodificar(normalizada)
             lista_resultados.append(registro)
-            mostrar_registro(registro)
     arquivo.close()
+    atribuir_enderecos(lista_resultados)
+    for registro in lista_resultados:
+        mostrar_registro(registro)
+    lista_conflitos = detectar_conflitos_dados(lista_resultados)
+    mostrar_conflitos_dados(lista_conflitos)
     cont_r = 0
     cont_i = 0
     cont_s = 0
