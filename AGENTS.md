@@ -15,7 +15,7 @@ Público: pessoa com conhecimento básico em lógica de programação. Código v
 - Texto: indexação, concatenação com `+`, `split`, `join`, `strip`, fatiamento para leitura de campos. Prefira sempre a sintaxe `[x:y]` para recortar trechos de strings.
 - Embutidas elementares: `len()`, `int()` (decimal; base 16 só na leitura de hex, base 2 só na validação de binário), `str()`, `open()`, `print()`, `input()`, `format()` (só `"b"` para gerar binário).
 - `dict` para tabelas de lookup (nomes ABI, opcode para tipo, f3/f7 para mnemonico, tipo para formato), quando for mais simples que `if/elif`.
-- Import entre arquivos locais do projeto (`main`, `decoder`, `entrada`, `instrucoes`, `cpi`, `config`, `pseudo`) liberado, para não duplicar código. Rode da raiz do projeto com `python src/riscv_decoder/main.py`.
+- Import entre arquivos locais do projeto (`main`, `decoder`, `input`, `instructions`, `cpi`, `config`, `pseudo`) liberado, para não duplicar código. Rode da raiz do projeto com `python src/riscv_decoder/main.py`.
 
 ### Domínio
 

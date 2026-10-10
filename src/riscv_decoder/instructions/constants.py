@@ -1,7 +1,7 @@
 # decodificacao das instrucoes lui e auipc
-from entrada.conversoes import binary_to_signed
-from instrucoes.comum import register_to_abi
-from instrucoes.comum import print_result
+from input.convert import binary_to_signed
+from instructions.common import register_to_abi
+from instructions.common import criar_registro
 
 
 def decode_lui(bits):
@@ -12,7 +12,7 @@ def decode_lui(bits):
     valor = binary_to_signed(pedaco_imm)
     imm = str(valor)
     montada = "lui" + " " + rd + "," + imm
-    print_result("lui", "lui", rd, "", "", imm, "", "", montada)
+    return criar_registro("lui", "lui", rd, "", "", imm, "", "", montada, "")
 
 
 def decode_auipc(bits):
@@ -23,4 +23,4 @@ def decode_auipc(bits):
     valor = binary_to_signed(pedaco_imm)
     imm = str(valor)
     montada = "auipc" + " " + rd + "," + imm
-    print_result("auipc", "auipc", rd, "", "", imm, "", "", montada)
+    return criar_registro("auipc", "auipc", rd, "", "", imm, "", "", montada, "")
