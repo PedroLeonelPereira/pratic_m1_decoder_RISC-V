@@ -553,6 +553,8 @@ def mostrar_controle(lista_controle, lista_blocos, lista_borda):
 # nop e o addi com destino zero, origem zero e imediato zero
 # codigo de maquina 0x00000013, formato I, nunca le nem escreve de verdade
 # endereco comeca zerado e e refeito depois, inserido marca que foi criado aqui
+# endereco original fica negativo para mostrar que nao veio do arquivo
+# bits guarda os 32 caracteres e hex guarda a linha pronta do arquivo
 def criar_nop():
     nop = {}
     nop["tipo"] = "I"
@@ -569,12 +571,17 @@ def criar_nop():
     nop["endereco"] = 0
     nop["endereco_texto"] = ""
     nop["inserido"] = "sim"
+    nop["endereco_original"] = 0 - 1
+    nop["bits"] = "00000000000000000000000000010011"
+    nop["hex"] = "0x00000013"
     return nop
 
 
 # copia um registro campo a campo para nao mexer no original
 # mantem todos os campos iguais, so marca que nao foi inserido
 # quem nao tem a marca ainda ganha a marca de original
+# endereco original guarda o endereco antigo para achar o alvo depois
+# bits e hex viajam juntos quando ja existirem no original
 def copiar_registro(registro):
     copia = {}
     copia["tipo"] = registro["tipo"]
@@ -591,6 +598,18 @@ def copiar_registro(registro):
     copia["endereco"] = registro["endereco"]
     copia["endereco_texto"] = registro["endereco_texto"]
     copia["inserido"] = "nao"
+    if "endereco_original" in registro:
+        copia["endereco_original"] = registro["endereco_original"]
+    else:
+        copia["endereco_original"] = registro["endereco"]
+    if "bits" in registro:
+        copia["bits"] = registro["bits"]
+    else:
+        copia["bits"] = ""
+    if "hex" in registro:
+        copia["hex"] = registro["hex"]
+    else:
+        copia["hex"] = ""
     return copia
 
 
@@ -651,7 +670,8 @@ def nops_necessarios_antes(lista_corrigida, registro, ultimo_produtor):
 # logo apos cada desvio condicional insere um nop de slot que sempre executa
 # invalida entra na lista mas nunca pede nop e nunca vira slot
 # nop inserido nunca le nem escreve, so afasta produtor e consumidor
-# no fim refaz todos os enderecos em ordem e devolve a lista nova
+# no fim refaz todos os enderecos em ordem e reescreve desvios e saltos
+# a reescrita mantem cada desvio e salto apontando para o mesmo alvo de antes
 def corrigir_somente_nops(lista_resultados):
     corrigida = []
     ultimo_produtor = {}
@@ -676,4 +696,260 @@ def corrigir_somente_nops(lista_resultados):
             corrigida.append(slot)
         indice = indice + 1
     atribuir_enderecos(corrigida)
+    recalcular_desvios_e_saltos(lista_resultados, corrigida)
     return corrigida
+
+
+# nome ABI para os 5 bits do registrador, ordem fixa de Engenharia
+# serve para remontar a instrucao sem precisar de conta esperta
+tabela_abi_para_bits = {
+    "zero": "00000",
+    "ra": "00001",
+    "sp": "00010",
+    "gp": "00011",
+    "tp": "00100",
+    "t0": "00101",
+    "t1": "00110",
+    "t2": "00111",
+    "s0": "01000",
+    "s1": "01001",
+    "a0": "01010",
+    "a1": "01011",
+    "a2": "01100",
+    "a3": "01101",
+    "a4": "01110",
+    "a5": "01111",
+    "a6": "10000",
+    "a7": "10001",
+    "s2": "10010",
+    "s3": "10011",
+    "s4": "10100",
+    "s5": "10101",
+    "s6": "10110",
+    "s7": "10111",
+    "s8": "11000",
+    "s9": "11001",
+    "s10": "11010",
+    "s11": "11011",
+    "t3": "11100",
+    "t4": "11101",
+    "t5": "11110",
+    "t6": "11111",
+}
+
+
+# cada grupo de 4 bits para o digito hexadecimal da linha de saida
+# serve para escrever o arquivo corrigido no mesmo formato da entrada
+tabela_nibble_para_hex = {
+    "0000": "0",
+    "0001": "1",
+    "0010": "2",
+    "0011": "3",
+    "0100": "4",
+    "0101": "5",
+    "0110": "6",
+    "0111": "7",
+    "1000": "8",
+    "1001": "9",
+    "1010": "a",
+    "1011": "b",
+    "1100": "c",
+    "1101": "d",
+    "1110": "e",
+    "1111": "f",
+}
+
+
+# devolve os 5 bits de um nome ABI ou vazio quando nao conhece
+# nome desconhecido nao recodifica, a instrucao fica como estava
+def abi_para_bits(nome):
+    if nome in tabela_abi_para_bits:
+        return tabela_abi_para_bits[nome]
+    return ""
+
+
+# calcula dois elevado ao expoente so com multiplicacao repetida
+# exemplo expoente 4 devolve 16, expoente 0 devolve 1
+def potencia_de_dois(expoente):
+    resultado = 1
+    contador = 0
+    while contador < expoente:
+        resultado = resultado * 2
+        contador = contador + 1
+    return resultado
+
+
+# converte deslocamento decimal em texto binario com largura fixa
+# usa complemento de dois para negativo somando dois elevado a largura
+# positivo completa com zeros a esquerda ate a largura
+# quando passa da largura fica so com os ultimos bits da direita
+# exemplo valor 12 largura 13 vira 0000000001100, valor 0 menos 12 vira 111111110100
+def decimal_para_binario_largura(valor, largura):
+    positivo = valor
+    if valor < 0:
+        potencia = potencia_de_dois(largura)
+        positivo = valor + potencia
+    texto = format(positivo, "b")
+    while len(texto) < largura:
+        texto = "0" + texto
+    if len(texto) > largura:
+        inicio = len(texto) - largura
+        fim = len(texto)
+        texto = texto[inicio:fim]
+    return texto
+
+
+# converte 32 caracteres binarios em linha hexadecimal com prefixo 0x
+# recorta de 4 em 4 e troca cada pedaco pelo digito da tabela
+# exemplo 32 zeros vira 0x00000000
+def bits_para_hex_linha(bits):
+    resultado = "0x"
+    indice = 0
+    while indice < 32:
+        fim = indice + 4
+        pedaco = bits[indice:fim]
+        if pedaco in tabela_nibble_para_hex:
+            digito = tabela_nibble_para_hex[pedaco]
+            resultado = resultado + digito
+        else:
+            resultado = resultado + "0"
+        indice = indice + 4
+    return resultado
+
+
+# monta os 32 bits de um desvio condicional com deslocamento novo
+# deslocamento tem 13 bits com o zero final, recortado por fatiamento
+# ordem arquitetural por concatenacao de texto sem conta esperta
+# devolve os 32 caracteres prontos para gravar e decodificar de volta
+def montar_bits_b(rs1_bits, rs2_bits, f3, deslocamento):
+    cheio = decimal_para_binario_largura(deslocamento, 13)
+    pedaco_12 = cheio[0:1]
+    pedaco_11 = cheio[1:2]
+    pedaco_10_5 = cheio[2:8]
+    pedaco_4_1 = cheio[8:12]
+    opcode = "1100011"
+    bits = pedaco_12 + pedaco_10_5 + rs2_bits + rs1_bits + f3 + pedaco_4_1 + pedaco_11 + opcode
+    return bits
+
+
+# monta os 32 bits de um jal com deslocamento novo
+# deslocamento tem 21 bits com o zero final, recortado por fatiamento
+# ordem arquitetural por concatenacao de texto sem conta esperta
+# devolve os 32 caracteres prontos para gravar e decodificar de volta
+def montar_bits_j(rd_bits, deslocamento):
+    cheio = decimal_para_binario_largura(deslocamento, 21)
+    pedaco_20 = cheio[0:1]
+    pedaco_19_12 = cheio[1:9]
+    pedaco_11 = cheio[9:10]
+    pedaco_10_1 = cheio[10:20]
+    opcode = "1101111"
+    bits = pedaco_20 + pedaco_10_1 + pedaco_11 + pedaco_19_12 + rd_bits + opcode
+    return bits
+
+
+# reescreve um desvio ou salto com o deslocamento novo em linguagem de maquina
+# atualiza imediato em decimal, assembly, bits e linha hexadecimal juntos
+# jal com destino zero ganha o pseudo de salto simples, resto fica sem pseudo
+# desvio condicional mantem pseudo vazio como na decodificacao da M1
+# tipo que nao e B nem J nao muda nada e devolve texto vazio
+def recodificar_com_novo_deslocamento(registro, novo_deslocamento):
+    if registro["tipo"] == "B":
+        rs1_bits = abi_para_bits(registro["rs1"])
+        if rs1_bits == "":
+            return ""
+        rs2_bits = abi_para_bits(registro["rs2"])
+        if rs2_bits == "":
+            return ""
+        f3 = registro["f3"]
+        if f3 == "":
+            return ""
+        bits = montar_bits_b(rs1_bits, rs2_bits, f3, novo_deslocamento)
+        texto_deslocamento = str(novo_deslocamento)
+        registro["imm"] = texto_deslocamento
+        registro["assembly"] = registro["mnemonico"] + " " + registro["rs1"] + "," + registro["rs2"] + "," + texto_deslocamento
+        registro["bits"] = bits
+        registro["hex"] = bits_para_hex_linha(bits)
+        return bits
+    if registro["tipo"] == "J":
+        rd_bits = abi_para_bits(registro["rd"])
+        if rd_bits == "":
+            return ""
+        bits = montar_bits_j(rd_bits, novo_deslocamento)
+        texto_deslocamento = str(novo_deslocamento)
+        registro["imm"] = texto_deslocamento
+        registro["assembly"] = registro["mnemonico"] + " " + registro["rd"] + "," + texto_deslocamento
+        if registro["rd"] == "zero":
+            registro["pseudo"] = "j " + texto_deslocamento
+        else:
+            registro["pseudo"] = ""
+        registro["bits"] = bits
+        registro["hex"] = bits_para_hex_linha(bits)
+        return bits
+    return ""
+
+
+# refaz enderecos em ordem e reescreve cada desvio e salto para o mesmo alvo
+# primeiro refaz todos os enderecos antes de qualquer conta de deslocamento
+# alvo antigo e endereco antigo mais imediato antigo da instrucao original
+# alvo dentro do programa segue a instrucao que tem o mesmo endereco original
+# alvo fora do programa segue o mesmo endereco absoluto de antes
+# deslocamento novo e alvo novo menos endereco novo de quem desvia ou salta
+# jal por registrador nunca entra aqui porque o destino e desconhecido
+# invalida nunca entra, inserido nunca e desvio
+def recalcular_desvios_e_saltos(lista_original, lista_corrigida):
+    atribuir_enderecos(lista_corrigida)
+    mapa_antigo = mapa_endereco_indice(lista_original)
+    mapa_novo = {}
+    indice = 0
+    total = len(lista_corrigida)
+    while indice < total:
+        registro = lista_corrigida[indice]
+        if registro["inserido"] == "nao":
+            if "endereco_original" in registro:
+                origem = registro["endereco_original"]
+                mapa_novo[origem] = indice
+        indice = indice + 1
+    indice = 0
+    while indice < total:
+        registro = lista_corrigida[indice]
+        if registro["tipo"] == "B":
+            if registro["inserido"] == "nao":
+                if "endereco_original" in registro:
+                    origem_antiga = registro["endereco_original"]
+                    if origem_antiga in mapa_antigo:
+                        posicao_antiga = mapa_antigo[origem_antiga]
+                        antigo = lista_original[posicao_antiga]
+                        if antigo["imm"] != "":
+                            desloc_antigo = int(antigo["imm"])
+                            alvo_antigo = antigo["endereco"] + desloc_antigo
+                            if alvo_antigo in mapa_antigo:
+                                if alvo_antigo in mapa_novo:
+                                    posicao_alvo_nova = mapa_novo[alvo_antigo]
+                                    endereco_alvo_novo = lista_corrigida[posicao_alvo_nova]["endereco"]
+                                    novo_deslocamento = endereco_alvo_novo - registro["endereco"]
+                                    recodificar_com_novo_deslocamento(registro, novo_deslocamento)
+                            else:
+                                novo_deslocamento = alvo_antigo - registro["endereco"]
+                                recodificar_com_novo_deslocamento(registro, novo_deslocamento)
+        else:
+            if registro["tipo"] == "J":
+                if registro["inserido"] == "nao":
+                    if "endereco_original" in registro:
+                        origem_antiga = registro["endereco_original"]
+                        if origem_antiga in mapa_antigo:
+                            posicao_antiga = mapa_antigo[origem_antiga]
+                            antigo = lista_original[posicao_antiga]
+                            if antigo["imm"] != "":
+                                desloc_antigo = int(antigo["imm"])
+                                alvo_antigo = antigo["endereco"] + desloc_antigo
+                                if alvo_antigo in mapa_antigo:
+                                    if alvo_antigo in mapa_novo:
+                                        posicao_alvo_nova = mapa_novo[alvo_antigo]
+                                        endereco_alvo_novo = lista_corrigida[posicao_alvo_nova]["endereco"]
+                                        novo_deslocamento = endereco_alvo_novo - registro["endereco"]
+                                        recodificar_com_novo_deslocamento(registro, novo_deslocamento)
+                                else:
+                                    novo_deslocamento = alvo_antigo - registro["endereco"]
+                                    recodificar_com_novo_deslocamento(registro, novo_deslocamento)
+        indice = indice + 1
+    return lista_corrigida
