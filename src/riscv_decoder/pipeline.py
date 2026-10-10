@@ -221,3 +221,329 @@ def mostrar_conflitos_dados(lista_conflitos):
         linha = linha + " [" + conflito["registrador"] + ", d=" + str(conflito["distancia"]) + ", " + str(conflito["nops"]) + " nops]"
         print(linha)
         indice = indice + 1
+
+
+# diz se o registro e um desvio condicional valido
+# desvio condicional e o tipo B, que le dois registradores e nao escreve nenhum
+# invalida nunca e desvio, mesmo que o texto pareca um desvio
+def eh_desvio_condicional(registro):
+    if registro["tipo"] == "invalida":
+        return "nao"
+    if registro["tipo"] == "B":
+        return "sim"
+    return "nao"
+
+
+# diz se o registro e um salto valido
+# salto e o jal do tipo J ou o jalr, os dois encerram o bloco basico
+# invalida nunca e salto
+def eh_salto(registro):
+    if registro["tipo"] == "invalida":
+        return "nao"
+    if registro["tipo"] == "J":
+        return "sim"
+    if registro["tipo"] == "jalr":
+        return "sim"
+    return "nao"
+
+
+# diz se o registro encerra um bloco basico
+# todo desvio condicional e todo salto encerram um bloco
+def eh_desvio_ou_salto(registro):
+    if eh_desvio_condicional(registro) == "sim":
+        return "sim"
+    if eh_salto(registro) == "sim":
+        return "sim"
+    return "nao"
+
+
+# calcula o endereco de destino de um desvio condicional ou de um jal
+# destino e o proprio endereco mais o deslocamento decimal do campo imm
+# jalr tem destino desconhecido porque depende do valor do registrador, devolve -1
+# invalida e formato sem deslocamento tambem devolvem -1
+def calcular_alvo(registro):
+    if registro["tipo"] == "invalida":
+        return 0 - 1
+    if registro["tipo"] == "B":
+        texto = registro["imm"]
+        if texto == "":
+            return 0 - 1
+        deslocamento = int(texto)
+        return registro["endereco"] + deslocamento
+    if registro["tipo"] == "J":
+        texto = registro["imm"]
+        if texto == "":
+            return 0 - 1
+        deslocamento = int(texto)
+        return registro["endereco"] + deslocamento
+    return 0 - 1
+
+
+# monta a tabela de endereco para posicao na lista
+# serve para achar a instrucao de destino de cada desvio ou salto
+def mapa_endereco_indice(lista_resultados):
+    mapa = {}
+    indice = 0
+    total = len(lista_resultados)
+    while indice < total:
+        registro = lista_resultados[indice]
+        mapa[registro["endereco"]] = indice
+        indice = indice + 1
+    return mapa
+
+
+# cria um registro de conflito de controle com o desvio e o ocupante do slot
+def criar_conflito_controle(desvio_texto, desvio_assembly, slot_texto, slot_assembly):
+    conflito = {}
+    conflito["desvio"] = desvio_texto
+    conflito["desvio_assembly"] = desvio_assembly
+    conflito["slot"] = slot_texto
+    conflito["slot_assembly"] = slot_assembly
+    return conflito
+
+
+# detecta um conflito de controle para cada desvio condicional valido
+# o ocupante do slot e sempre a instrucao seguinte, que executa nos dois caminhos
+# desvio sem seguinte e seguinte invalida nao viram slot e nao geram conflito
+def detectar_conflitos_controle(lista_resultados):
+    conflitos = []
+    indice = 0
+    total = len(lista_resultados)
+    while indice < total:
+        registro = lista_resultados[indice]
+        if eh_desvio_condicional(registro) == "sim":
+            seguinte = indice + 1
+            if seguinte < total:
+                ocupante = lista_resultados[seguinte]
+                if ocupante["tipo"] != "invalida":
+                    conflito = criar_conflito_controle(registro["endereco_texto"], registro["assembly"], ocupante["endereco_texto"], ocupante["assembly"])
+                    conflitos.append(conflito)
+        indice = indice + 1
+    return conflitos
+
+
+# cria um registro de bloco basico com numero, endereco inicial, final e tamanho
+def criar_bloco(numero, inicio_texto, fim_texto, tamanho):
+    bloco = {}
+    bloco["numero"] = numero
+    bloco["inicio"] = inicio_texto
+    bloco["fim"] = fim_texto
+    bloco["total"] = tamanho
+    return bloco
+
+
+# delimita os blocos basicos do programa
+# todo alvo valido de desvio ou salto inicia um bloco
+# toda instrucao valida logo apos desvio ou salto inicia um bloco
+# todo desvio ou salto encerra um bloco, buraco de invalida tambem corta
+# invalida nunca entra em bloco nenhum, nem abre nem fecha
+def delimitar_blocos_basicos(lista_resultados):
+    blocos = []
+    total = len(lista_resultados)
+    mapa = mapa_endereco_indice(lista_resultados)
+    eh_inicio = {}
+    indice = 0
+    achou_primeiro = "nao"
+    while indice < total:
+        registro = lista_resultados[indice]
+        if achou_primeiro == "nao":
+            if registro["tipo"] != "invalida":
+                eh_inicio[indice] = "sim"
+                achou_primeiro = "sim"
+        indice = indice + 1
+    indice = 0
+    while indice < total:
+        registro = lista_resultados[indice]
+        if registro["tipo"] == "B":
+            alvo = calcular_alvo(registro)
+            if alvo in mapa:
+                destino = mapa[alvo]
+                if lista_resultados[destino]["tipo"] != "invalida":
+                    eh_inicio[destino] = "sim"
+        else:
+            if registro["tipo"] == "J":
+                alvo = calcular_alvo(registro)
+                if alvo in mapa:
+                    destino = mapa[alvo]
+                    if lista_resultados[destino]["tipo"] != "invalida":
+                        eh_inicio[destino] = "sim"
+        indice = indice + 1
+    indice = 0
+    while indice < total:
+        registro = lista_resultados[indice]
+        if eh_desvio_ou_salto(registro) == "sim":
+            seguinte = indice + 1
+            if seguinte < total:
+                if lista_resultados[seguinte]["tipo"] != "invalida":
+                    eh_inicio[seguinte] = "sim"
+        indice = indice + 1
+    validos = []
+    indice = 0
+    while indice < total:
+        if lista_resultados[indice]["tipo"] != "invalida":
+            validos.append(indice)
+        indice = indice + 1
+    numero = 1
+    posicao_inicial = 0
+    posicao = 0
+    quantidade = len(validos)
+    while posicao < quantidade:
+        atual = validos[posicao]
+        corta = "nao"
+        if eh_desvio_ou_salto(lista_resultados[atual]) == "sim":
+            corta = "sim"
+        else:
+            if posicao == quantidade - 1:
+                corta = "sim"
+            else:
+                proximo = validos[posicao + 1]
+                if proximo != atual + 1:
+                    corta = "sim"
+                else:
+                    if proximo in eh_inicio:
+                        corta = "sim"
+        if corta == "sim":
+            primeiro = validos[posicao_inicial]
+            inicio_texto = lista_resultados[primeiro]["endereco_texto"]
+            fim_texto = lista_resultados[atual]["endereco_texto"]
+            tamanho = posicao - posicao_inicial + 1
+            bloco = criar_bloco(numero, inicio_texto, fim_texto, tamanho)
+            blocos.append(bloco)
+            numero = numero + 1
+            posicao_inicial = posicao + 1
+        posicao = posicao + 1
+    return blocos
+
+
+# procura o produtor mais recente de um registrador antes de uma posicao limite
+# devolve o indice do escritor ou o proprio limite quando ninguem escreveu
+# invalida nunca escreve, zero nunca escreve, busca so ate antes do limite
+def procurar_produtor_antes(lista_resultados, limite, registrador):
+    achado = limite
+    indice = 0
+    while indice < limite:
+        escrita = obter_escrita(lista_resultados[indice])
+        if escrita == registrador:
+            achado = indice
+        indice = indice + 1
+    return achado
+
+
+# cria um registro de conflito de borda com produtor, consumidor e caminho
+# caminho sequencial e o inicio sem desvio, caminho alvo e o destino do desvio
+def criar_conflito_borda(produtor_texto, produtor_assembly, consumidor_texto, consumidor_assembly, registrador, distancia, nops, caminho):
+    conflito = {}
+    conflito["produtor"] = produtor_texto
+    conflito["produtor_assembly"] = produtor_assembly
+    conflito["consumidor"] = consumidor_texto
+    conflito["consumidor_assembly"] = consumidor_assembly
+    conflito["registrador"] = registrador
+    conflito["distancia"] = distancia
+    conflito["nops"] = nops
+    conflito["caminho"] = caminho
+    return conflito
+
+
+# detecta conflitos de dados que atravessam a fronteira de cada desvio condicional
+# para cada um dos dois caminhos olha a primeira instrucao do caminho
+# caminho sequencial e a seguinte ao desvio, caminho alvo e a do destino
+# produtor e sempre anterior ao desvio, consumidor e o inicio do caminho
+# no caminho sequencial a distancia conta as posicoes na lista
+# no caminho alvo a distancia soma um passo pelo slot, que sempre executa
+# conflito so quando distancia e 1 (2 nops) ou 2 (1 nop), igual aos dados
+# caminho sem instrucao e instrucao invalida nao geram conflito de borda
+def detectar_conflitos_borda(lista_resultados):
+    conflitos = []
+    mapa = mapa_endereco_indice(lista_resultados)
+    indice = 0
+    total = len(lista_resultados)
+    while indice < total:
+        registro = lista_resultados[indice]
+        if eh_desvio_condicional(registro) == "sim":
+            seguinte = indice + 1
+            if seguinte < total:
+                consumidor = lista_resultados[seguinte]
+                if consumidor["tipo"] != "invalida":
+                    leituras = listar_leituras(consumidor)
+                    contador = 0
+                    while contador < len(leituras):
+                        registrador = leituras[contador]
+                        produtor = procurar_produtor_antes(lista_resultados, indice, registrador)
+                        if produtor != indice:
+                            distancia = seguinte - produtor
+                            if distancia == 1:
+                                nops = 2
+                                origem = lista_resultados[produtor]
+                                conflito = criar_conflito_borda(origem["endereco_texto"], origem["assembly"], consumidor["endereco_texto"], consumidor["assembly"], registrador, distancia, nops, "sequencial")
+                                conflitos.append(conflito)
+                            else:
+                                if distancia == 2:
+                                    nops = 1
+                                    origem = lista_resultados[produtor]
+                                    conflito = criar_conflito_borda(origem["endereco_texto"], origem["assembly"], consumidor["endereco_texto"], consumidor["assembly"], registrador, distancia, nops, "sequencial")
+                                    conflitos.append(conflito)
+                        contador = contador + 1
+            alvo = calcular_alvo(registro)
+            if alvo in mapa:
+                destino = mapa[alvo]
+                if lista_resultados[destino]["tipo"] != "invalida":
+                    consumidor = lista_resultados[destino]
+                    leituras = listar_leituras(consumidor)
+                    contador = 0
+                    while contador < len(leituras):
+                        registrador = leituras[contador]
+                        produtor = procurar_produtor_antes(lista_resultados, indice, registrador)
+                        if produtor != indice:
+                            distancia = indice - produtor + 1
+                            if distancia == 1:
+                                nops = 2
+                                origem = lista_resultados[produtor]
+                                conflito = criar_conflito_borda(origem["endereco_texto"], origem["assembly"], consumidor["endereco_texto"], consumidor["assembly"], registrador, distancia, nops, "alvo")
+                                conflitos.append(conflito)
+                            else:
+                                if distancia == 2:
+                                    nops = 1
+                                    origem = lista_resultados[produtor]
+                                    conflito = criar_conflito_borda(origem["endereco_texto"], origem["assembly"], consumidor["endereco_texto"], consumidor["assembly"], registrador, distancia, nops, "alvo")
+                                    conflitos.append(conflito)
+                        contador = contador + 1
+        indice = indice + 1
+    return conflitos
+
+
+# mostra o controle no formato canonico em tres partes separadas dos dados
+# primeiro cada desvio com seu slot, depois os blocos, depois as bordas
+def mostrar_controle(lista_controle, lista_blocos, lista_borda):
+    print("CONFLITOS DE CONTROLE")
+    indice = 0
+    total = len(lista_controle)
+    while indice < total:
+        conflito = lista_controle[indice]
+        linha = "  " + conflito["desvio"] + " " + conflito["desvio_assembly"]
+        linha = linha + " -> slot " + conflito["slot"] + " " + conflito["slot_assembly"]
+        linha = linha + " [sempre executa]"
+        print(linha)
+        indice = indice + 1
+    print("BLOCOS BASICOS")
+    indice = 0
+    total = len(lista_blocos)
+    while indice < total:
+        bloco = lista_blocos[indice]
+        linha = "  bloco " + str(bloco["numero"]) + ": " + bloco["inicio"] + " .. " + bloco["fim"]
+        if bloco["total"] == 1:
+            linha = linha + " (1 instrucao)"
+        else:
+            linha = linha + " (" + str(bloco["total"]) + " instrucoes)"
+        print(linha)
+        indice = indice + 1
+    print("CONFLITOS DE BORDA")
+    indice = 0
+    total = len(lista_borda)
+    while indice < total:
+        conflito = lista_borda[indice]
+        linha = "  " + conflito["consumidor"] + " " + conflito["consumidor_assembly"]
+        linha = linha + " <- " + conflito["produtor"] + " " + conflito["produtor_assembly"]
+        linha = linha + " [" + conflito["registrador"] + ", d=" + str(conflito["distancia"]) + ", " + str(conflito["nops"]) + " nops"
+        linha = linha + ", caminho=" + conflito["caminho"] + "]"
+        print(linha)
+        indice = indice + 1

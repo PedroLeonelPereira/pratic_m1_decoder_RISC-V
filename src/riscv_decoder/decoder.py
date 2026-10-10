@@ -19,6 +19,10 @@ from cpi import print_cpi_summary
 from pipeline import atribuir_enderecos
 from pipeline import detectar_conflitos_dados
 from pipeline import mostrar_conflitos_dados
+from pipeline import detectar_conflitos_controle
+from pipeline import delimitar_blocos_basicos
+from pipeline import detectar_conflitos_borda
+from pipeline import mostrar_controle
 
 
 def decodificar(bits):
@@ -78,6 +82,10 @@ def run_program():
         mostrar_registro(registro)
     lista_conflitos = detectar_conflitos_dados(lista_resultados)
     mostrar_conflitos_dados(lista_conflitos)
+    lista_controle = detectar_conflitos_controle(lista_resultados)
+    lista_blocos = delimitar_blocos_basicos(lista_resultados)
+    lista_borda = detectar_conflitos_borda(lista_resultados)
+    mostrar_controle(lista_controle, lista_blocos, lista_borda)
     cont_r = 0
     cont_i = 0
     cont_s = 0
